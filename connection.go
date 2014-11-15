@@ -40,7 +40,6 @@ func (c *connection) connectAndAuth(host string, port int, username, password st
 func (c *connection) init() error {
 	//receive handshake
 	reader := newProtoReader(bufio.NewReader(c.conn))
-
 	err := c.header.read(reader)
 
 	if err != nil {
@@ -52,8 +51,6 @@ func (c *connection) init() error {
 	if err != nil {
 		return err
 	}
-
-
 
 	return nil
 }

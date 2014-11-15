@@ -14,7 +14,7 @@ func newProtoReader(bufio *bufio.Reader) *protoReader {
 	return &protoReader{bufio}
 }
 
-func (pr *protoReader) ReadThreeBytesUint32() (uint32, error) {
+func (pr *protoReader) readThreeBytesUint32() (uint32, error) {
 	var result uint32
 
 	buff := make([]byte, 3)
@@ -31,7 +31,7 @@ func (pr *protoReader) ReadThreeBytesUint32() (uint32, error) {
 	return result, nil
 }
 
-func (pr *protoReader) ReadUint32() (uint32, error) {
+func (pr *protoReader) readUint32() (uint32, error) {
 	var result uint32
 
 	buff := make([]byte, 4)
@@ -49,7 +49,7 @@ func (pr *protoReader) ReadUint32() (uint32, error) {
 	return result, nil
 }
 
-func (pr *protoReader) ReadUint16() (uint16, error) {
+func (pr *protoReader) readUint16() (uint16, error) {
 	b1, err := pr.ReadByte()
 	if err != nil {
 		return 0, err
@@ -63,12 +63,12 @@ func (pr *protoReader) ReadUint16() (uint16, error) {
 	return uint16(b1&0xFF) + (uint16(b2&0xFF) << 8), nil
 }
 
-func (pr *protoReader) ReadNilString() (string, error) {
+func (pr *protoReader) readNilString() ([]byte, error) {
 	buff, err := pr.ReadBytes(byte(0))
 
 	if err != nil {
-		return "", err
+		return []byte{}, err
 	}
 
-	return string(buff[0 : len(buff)-1]), nil
+	return buff[0 : len(buff)-1], nil
 }

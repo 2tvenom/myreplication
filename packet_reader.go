@@ -12,7 +12,7 @@ func newPkgHeader() *pkgHeader {
 }
 
 func (p *pkgHeader) read(r *protoReader) error {
-	length, err := r.ReadThreeBytesUint32()
+	length, err := r.readThreeBytesUint32()
 
 	if err != nil {
 		return err
@@ -30,5 +30,14 @@ func (p *pkgHeader) read(r *protoReader) error {
 		panic("Incorrect sequence")
 	}
 	p.sequence++
+	return nil
+}
+
+func (p *pkgHeader) resetSequence() {
+	p.sequence = 0
+}
+
+func (p *pkgHeader) write(r *protoWriter, length uint32) error {
+	//	r.WriteUInt32()
 	return nil
 }

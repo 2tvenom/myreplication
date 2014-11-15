@@ -14,7 +14,7 @@ func newProtoWriter(bufio *bufio.Writer) *protoWriter {
 	return &protoWriter{bufio}
 }
 
-func (pw *protoWriter) WriteUInt32(data uint32) error {
+func (pw *protoWriter) writeUInt32(data uint32) error {
 	buff := make([]byte, 4, 4)
 
 	for i := 0; i < 4; i++ {
@@ -24,7 +24,17 @@ func (pw *protoWriter) WriteUInt32(data uint32) error {
 	return err
 }
 
-func (pw *protoWriter) WriteStringNil(data string) error {
+func (pw *protoWriter) writeTheeByteUInt32(data uint32) error {
+	buff := make([]byte, 3, 3)
+
+	for i := 0; i < 3; i++ {
+		buff[i] = byte(data >> uint(i*8))
+	}
+	_, err := pw.Write(buff)
+	return err
+}
+
+func (pw *protoWriter) writeStringNil(data string) error {
 	_, err := pw.Write([]byte(data))
 	if err != nil {
 		return err
