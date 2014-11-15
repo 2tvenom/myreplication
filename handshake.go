@@ -1,17 +1,7 @@
 package mysql_replication_listener
 
 /*
-protocol_version (1) -- 0x0a protocol_version
-server_version (string.NUL) -- human-readable server version
-connection_id (4) -- connection id
-auth_plugin_data_part_1 (string.fix_len) -- [len=8] first 8 bytes of the auth-plugin data
-filler_1 (1) -- 0x00
-capability_flag_1 (2) -- lower 2 bytes of the Protocol::CapabilityFlags (optional)
-character_set (1) -- default server character-set, only the lower 8-bits Protocol::CharacterSet (optional)
-status_flags (2) -- Protocol::StatusFlags (optional)
-capability_flag_2 (2) -- upper 2 bytes of the Protocol::CapabilityFlags
-auth_plugin_data_len (1) -- length of the combined auth_plugin_data, if auth_plugin_data_len is > 0
-auth_plugin_name (string.NUL) -- name of the auth_method that the auth_plugin_data belongs to
+	http://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::HandshakeV10
 */
 
 type (
@@ -96,8 +86,6 @@ func (h *pkgHandshake) readServer(r *protoReader, length uint32) (err error) {
 		return
 	}
 	h.capabilities = h.capabilities | (uint32(capSecond) << 8)
-	println(capSecond)
-	println(h.capabilities)
 	length -= 2
 
 	lengthAuthPluginData, err := r.Reader.ReadByte()
@@ -132,8 +120,6 @@ func (h *pkgHandshake) readServer(r *protoReader, length uint32) (err error) {
 
 		length -= uint32(lengthAuthPluginData)
 	}
-
-	println(_CLIENT_PLUGIN_AUTH)
 
 	if h.capabilities&_CLIENT_PLUGIN_AUTH == _CLIENT_PLUGIN_AUTH {
 		h.auth_plugin_name, err = r.readNilString()

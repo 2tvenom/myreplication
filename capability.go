@@ -1,5 +1,6 @@
 package mysql_replication_listener
 
+//http://dev.mysql.com/doc/internals/en/capability-flags.html
 const (
 	_CLIENT_LONG_PASSWORD                  uint32 = 0x00000001
 	_CLIENT_FOUND_ROWS                     uint32 = 0x00000002
