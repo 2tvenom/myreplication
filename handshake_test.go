@@ -1,13 +1,16 @@
 package mysql_replication_listener
 
 import (
-	"testing"
-	//	"bufio"
 	"reflect"
+	"testing"
 )
 
 func TestHandshakeRead(t *testing.T) {
 	mockHandshake := []byte{
+		//length
+		0xF5, 0x00, 0x00,
+		//sequence id
+		0x00,
 		//handshake version 10
 		0x0a,
 		//mysql plain text version
@@ -39,7 +42,7 @@ func TestHandshakeRead(t *testing.T) {
 	}
 	reader := getProtoReader(mockHandshake)
 	handshake := newHandshake()
-	err := handshake.readServer(reader, uint32(len(mockHandshake)))
+	err := handshake.readServer(reader)
 
 	if err != nil {
 		t.Fatal("Handshake read fail", err)
@@ -68,7 +71,6 @@ func TestHandshakeRead(t *testing.T) {
 	}
 
 	expectedAuthData := []byte("ROw,ng;0}F&):(W`Z%Gv")
-	expectedAuthData = append(expectedAuthData, byte(0))
 
 	if !reflect.DeepEqual(handshake.auth_plugin_data, expectedAuthData) {
 		t.Fatal("Incorrect auth plugin data", "expected", string(expectedAuthData), "got", string(handshake.auth_plugin_data))
@@ -80,4 +82,136 @@ func TestHandshakeRead(t *testing.T) {
 	//	if !reflect.DeepEqual(handshake.auth_plugin_name, expectedAuthPluginName) {
 	//		t.Fatal("Incorrect auth plugin name", "expected", string(expectedAuthPluginName), "got", string(handshake.auth_plugin_name))
 	//	}
+}
+
+func TestHandshakeWrite(t *testing.T) {
+	username := "test"
+	password := "test"
+	result := make([]byte, 0, 100)
+
+	writer := getProtoWriter(result)
+	handshake := newHandshake()
+	handshake.auth_plugin_data = []byte("test")
+	handshake.character_set = 2
+	handshake.capabilities = _CLIENT_SECURE_CONNECTION
+
+	sequenceId := byte(10)
+
+	err := handshake.writeServer(writer, sequenceId, username, password)
+
+	if err != nil {
+		t.Fatal("Handshake write fail", err)
+	}
+
+	err = writer.Flush()
+
+	if err != nil {
+		t.Fatal("Handshake flush fail", err)
+	}
+
+	//Capability test
+	expectedCapability := []byte{0xD7, 0xF7, 0x03, 0x00}
+
+	offset := 4
+
+	if !reflect.DeepEqual(expectedCapability, result[offset:offset+4]) {
+		t.Fatal("Handshake write capability flags",
+			"expected", expectedCapability,
+			"got", result[0:4],
+		)
+	}
+
+	offset += 4
+
+	//max pack size
+	expectedMaxPackSize := []byte{0xFF, 0xFF, 0xFF, 0x00}
+
+	if !reflect.DeepEqual(expectedMaxPackSize, result[offset:offset+4]) {
+		t.Fatal("Handshake write max pack size",
+			"expected", expectedMaxPackSize,
+			"got", result[4:8],
+		)
+	}
+
+	offset += 4
+
+	//charset
+	if handshake.character_set != result[offset : offset+1][0] {
+		t.Fatal("Handshake write charset",
+			"expected", handshake.character_set,
+			"got", result[8:9],
+		)
+	}
+
+	offset += 1
+
+	//filler
+	if !reflect.DeepEqual(make([]byte, 23, 23), result[offset:offset+23]) {
+		t.Fatal("Handshake filler aftert username",
+			"expected 23 zero byte arrys",
+			"got", result[9:32],
+		)
+	}
+
+	offset += 23
+
+	//username
+	if !reflect.DeepEqual([]byte(username), result[offset:offset+4]) {
+		t.Fatal("Handshake write username",
+			"expected", username,
+			"got", string(result[9:13]),
+		)
+	}
+
+	offset += 4
+
+	//username null byte
+	if byte(0) != result[offset : offset+1][0] {
+		t.Fatal("Handshake not write username zero byte")
+	}
+
+	offset += 1
+
+	pass := encryptedPasswd(password, handshake.auth_plugin_data)
+
+	//pass length
+	if byte(len(pass)) != result[offset : offset+1][0] {
+		t.Fatal("Handshake password length incorrect",
+			"expected", len(pass),
+			"got", result[offset : offset+1][0],
+		)
+	}
+
+	offset += 1
+
+	//password
+	if !reflect.DeepEqual(pass, result[offset:offset+len(pass)]) {
+		t.Fatal("Handshake incorrect password",
+			"expected", pass,
+			"got", result[offset:offset+len(pass)],
+		)
+	}
+
+	offset += len(pass)
+
+	//check header
+	//length
+
+	expectedLength := []byte{byte(offset - 4), 0, 0}
+
+	if !reflect.DeepEqual(expectedLength, result[0:3]) {
+		t.Fatal("Handshake length packet incorrect",
+			"expected", expectedLength,
+			"got", result[0:3],
+		)
+	}
+
+	//sequence id
+	if result[3:4][0] != sequenceId {
+		t.Fatal("Handshake incorrect sequence id",
+			"expected", sequenceId,
+			"got", result[3:4][0],
+		)
+	}
+
 }

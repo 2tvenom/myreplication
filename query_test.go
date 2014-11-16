@@ -1,0 +1,89 @@
+package mysql_replication_listener
+
+import (
+	"reflect"
+	"testing"
+)
+
+func TestSendQuery(t *testing.T) {
+	mockWriter := make([]byte, 0, 100)
+	writer := getProtoWriter(mockWriter)
+	mockReader := make([]byte, 0, 100)
+	reader := getProtoReader(mockReader)
+
+	command := "select @@version_comment limit 1"
+	_, err := query(writer, reader, command)
+
+	if err != nil {
+		t.Fatal("Query got error", err)
+	}
+
+	expectedLength := []byte{0x21, 0x00, 0x00}
+
+	offset := 0
+
+	if !reflect.DeepEqual(expectedLength, mockWriter[offset:offset+3]) {
+		t.Fatal(
+			"Incorrect query length",
+			"expected", expectedLength,
+			"got", mockWriter[offset:offset+3],
+		)
+	}
+
+	offset += 3
+
+	expectedSequence := byte(0)
+
+	if expectedSequence != mockWriter[offset : offset+1][0] {
+		t.Fatal(
+			"Incorrect sequence",
+			"expected", expectedSequence,
+			"got", mockWriter[offset : offset+1][0],
+		)
+	}
+
+	offset++
+
+	if _COM_QUERY != mockWriter[offset : offset+1][0] {
+		t.Fatal(
+			"Incorrect command",
+			"expected", _COM_QUERY,
+			"got", mockWriter[offset : offset+1][0],
+		)
+	}
+
+	offset++
+
+	if command != string(mockWriter[offset:offset+len(command)]) {
+		t.Fatal(
+			"Incorrect commnad",
+			"expected", command,
+			"got", string(mockWriter[offset:offset+len(command)]),
+		)
+	}
+
+	offset += len(command)
+}
+
+func TestReceiveQueryData(t *testing.T) {
+//	mockWriter := make([]byte, 0, 100)
+//	writer := getProtoWriter(mockWriter)
+//	mockReader := []byte{
+//		//length
+//		0x6f, 0x00, 0x00,
+//		//sequence id
+//		0x01,
+//		0xff, 0xcb, 0x04, 0x23, 0x34, 0x32, 0x30, 0x30, 0x30, 0x41, 0x63, 0x63, 0x65, 0x73, 0x73, 0x20, 0x64, 0x65,
+//		0x6e, 0x69, 0x65, 0x64, 0x3b, 0x20, 0x79, 0x6f, 0x75, 0x20, 0x6e, 0x65, 0x65, 0x64, 0x20, 0x28, 0x61, 0x74,
+//		0x20, 0x6c, 0x65, 0x61, 0x73, 0x74, 0x20, 0x6f, 0x6e, 0x65, 0x20, 0x6f, 0x66, 0x29, 0x20, 0x74, 0x68, 0x65,
+//		0x20, 0x53, 0x55, 0x50, 0x45, 0x52, 0x2c, 0x52, 0x45, 0x50, 0x4c, 0x49, 0x43, 0x41, 0x54, 0x49, 0x4f, 0x4e,
+//		0x20, 0x43, 0x4c, 0x49, 0x45, 0x4e, 0x54, 0x20, 0x70, 0x72, 0x69, 0x76, 0x69, 0x6c, 0x65, 0x67, 0x65, 0x28,
+//		0x73, 0x29, 0x20, 0x66, 0x6f, 0x72, 0x20, 0x74, 0x68, 0x69, 0x73, 0x20, 0x6f, 0x70, 0x65, 0x72, 0x61, 0x74,
+//		0x69, 0x6f, 0x6e,
+//	}
+//	reader := getProtoReader(mockReader)
+//
+//	command := "show master status"
+//	rs,_ := query(writer, reader, command)
+
+}

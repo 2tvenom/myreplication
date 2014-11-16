@@ -8,16 +8,18 @@ import (
 
 type (
 	connection struct {
-		conn      net.Conn
-		header    *pkgHeader
-		handshake *pkgHandshake
+		conn           net.Conn
+		handshake      *pkgHandshake
+		reader         *protoReader
+		writer         *protoWriter
+		masterPosition uint64
+		fileName       string
 	}
 )
 
 func newConnection() *connection {
 	return &connection{
 		conn:      nil,
-		header:    newPkgHeader(),
 		handshake: newHandshake(),
 	}
 }
@@ -29,7 +31,10 @@ func (c *connection) connectAndAuth(host string, port int, username, password st
 	}
 	c.conn = conn
 
-	err = c.init()
+	c.reader = newProtoReader(bufio.NewReader(c.conn))
+	c.writer = newProtoWriter(bufio.NewWriter(c.conn))
+
+	err = c.init(username, password)
 	if err != nil {
 		return err
 	}
@@ -37,20 +42,31 @@ func (c *connection) connectAndAuth(host string, port int, username, password st
 	return nil
 }
 
-func (c *connection) init() error {
+func (c *connection) init(username, password string) (err error) {
 	//receive handshake
-	reader := newProtoReader(bufio.NewReader(c.conn))
-	err := c.header.read(reader)
+	//get handshake data and parse
+	err = c.handshake.readServer(c.reader)
 
 	if err != nil {
-		return err
+		return
 	}
 
-	err = c.handshake.readServer(reader, c.header.length)
+	//prepare and buff handshake auth response
+	c.handshake.writeServer(c.writer, byte(1), username, password)
+	err = c.writer.Flush()
 
 	if err != nil {
-		return err
+		return
 	}
 
-	return nil
+	return ok_packet(c.reader)
+}
+
+func (c *connection) getMasterPosition() (uint64, error) {
+
+	return 0, nil
+}
+
+func (c *connection) query(command string) (*resultSet, error){
+	return query(c.writer, c.reader, command)
 }

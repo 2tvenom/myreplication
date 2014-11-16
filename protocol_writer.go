@@ -31,6 +31,7 @@ func (pw *protoWriter) writeTheeByteUInt32(data uint32) error {
 		buff[i] = byte(data >> uint(i*8))
 	}
 	_, err := pw.Write(buff)
+
 	return err
 }
 
@@ -39,6 +40,7 @@ func (pw *protoWriter) writeStringNil(data string) error {
 	if err != nil {
 		return err
 	}
+
 	err = pw.WriteByte(byte(0))
 	return err
 }
