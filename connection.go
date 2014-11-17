@@ -67,6 +67,6 @@ func (c *connection) getMasterPosition() (uint64, error) {
 	return 0, nil
 }
 
-func (c *connection) query(command string) (*resultSet, error){
+func (c *connection) query(command string) (*resultSet, error) {
 	return query(c.writer, c.reader, command)
 }

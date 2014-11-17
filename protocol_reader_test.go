@@ -27,6 +27,23 @@ func TestThreeByteUInt32(t *testing.T) {
 	}
 }
 
+func TestUint64(t *testing.T) {
+	mockData := []byte{0xC4, 0x74, 0x77, 0xCE, 0xCF, 0x11, 0x5E, 0x20}
+	reader := getProtoReader(mockData)
+
+	result, err := reader.readUint64()
+
+	if err != nil {
+		t.Error("Got error", err)
+	}
+
+	var expected uint64 = 2332321241244333252
+
+	if result != expected {
+		t.Error("Expected", expected, "got", result)
+	}
+}
+
 func TestUInt32(t *testing.T) {
 	mockData := []byte{0xD3, 0x87, 0x2C, 0x4A}
 	reader := getProtoReader(mockData)
@@ -73,5 +90,150 @@ func TestNilString(t *testing.T) {
 
 	if !reflect.DeepEqual(expected, result) {
 		t.Error("Expected", string(expected), "got", string(result))
+	}
+}
+
+func TestLenIntByte(t *testing.T) {
+	mockData := []byte{0xFA}
+	reader := getProtoReader(mockData)
+
+	result, null, byteLength := reader.readIntOrNil()
+
+	if null {
+		t.Error("Got null int")
+	}
+
+	byteLengthExpected := byte(1)
+	if byteLengthExpected != byteLength {
+		t.Error(
+			"Incorrect length",
+			"expected", byteLengthExpected,
+			"got", byteLength,
+		)
+	}
+
+	if result != 250 {
+		t.Error("Expected", 250, "got", result)
+	}
+}
+
+func TestLenUint16(t *testing.T) {
+	mockData := []byte{0xFC, 0xFB, 0x00}
+	reader := getProtoReader(mockData)
+
+	result, null, byteLength := reader.readIntOrNil()
+
+	byteLengthExpected := byte(3)
+	if byteLengthExpected != byteLength {
+		t.Error(
+			"Incorrect length",
+			"expected", byteLengthExpected,
+			"got", byteLength,
+		)
+	}
+
+	if null {
+		t.Error("Got null int")
+	}
+
+	if result != 251 {
+		t.Error("Expected", 251, "got", result)
+	}
+}
+
+func TestLenUint24(t *testing.T) {
+	mockData := []byte{0xFD, 0xC4, 0x1E, 0x42}
+	reader := getProtoReader(mockData)
+
+	result, null, byteLength := reader.readIntOrNil()
+
+	byteLengthExpected := byte(4)
+	if byteLengthExpected != byteLength {
+		t.Error(
+			"Incorrect length",
+			"expected", byteLengthExpected,
+			"got", byteLength,
+		)
+	}
+
+	if null {
+		t.Error("Got null int")
+	}
+
+	if result != 4333252 {
+		t.Error("Expected", 4333252, "got", result)
+	}
+}
+
+func TestLenUint64(t *testing.T) {
+	mockData := []byte{0xFE, 0xC4, 0x74, 0x77, 0xCE, 0xCF, 0x11, 0x5E, 0x20}
+	reader := getProtoReader(mockData)
+
+	result, null, byteLength := reader.readIntOrNil()
+
+	byteLengthExpected := byte(9)
+	if byteLengthExpected != byteLength {
+		t.Error(
+			"Incorrect length",
+			"expected", byteLengthExpected,
+			"got", byteLength,
+		)
+	}
+
+	if null {
+		t.Error("Got null int")
+	}
+
+	if result != 2332321241244333252 {
+		t.Error("Expected", 2332321241244333252, "got", result)
+	}
+}
+
+func TestLenNil(t *testing.T) {
+	mockData := []byte{0xFB}
+	reader := getProtoReader(mockData)
+
+	result, null, byteLength := reader.readIntOrNil()
+
+	byteLengthExpected := byte(1)
+	if byteLengthExpected != byteLength {
+		t.Error(
+			"Incorrect length",
+			"expected", byteLengthExpected,
+			"got", byteLength,
+		)
+	}
+
+	if !null {
+		t.Error("Got not null")
+	}
+
+	if result != 0 {
+		t.Error("Expected", 0, "got", result)
+	}
+}
+
+func TestLenString(t *testing.T) {
+	mockData := []byte{0x03, 0x64, 0x65, 0x66}
+	reader := getProtoReader(mockData)
+
+	result, byteLength, err := reader.readLenString()
+
+	if err != nil {
+		t.Error("Got error", err)
+	}
+
+	if byteLength != uint64(4) {
+		t.Error(
+			"Incorrect lenth",
+			"expected", 4,
+			"got", byteLength,
+		)
+	}
+
+	expected := "def"
+
+	if string(result) != expected {
+		t.Error("Expected", expected, "got", string(result))
 	}
 }

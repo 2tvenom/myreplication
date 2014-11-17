@@ -28,5 +28,10 @@ func query(writer *protoWriter, reader *protoReader, queryCommand string) (*resu
 		return nil, err
 	}
 
-	return &resultSet{reader}, nil
+	rs := &resultSet{reader: reader}
+	err = rs.init()
+	if err != nil {
+		return nil, err
+	}
+	return rs, err
 }
