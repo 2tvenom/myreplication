@@ -24,7 +24,7 @@ func newConnection() *connection {
 	}
 }
 
-func (c *connection) connectAndAuth(host string, port int, username, password string) error {
+func (c *connection) connectAndAuth(host string, port int, username, password string, server_id uint32) error {
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		return err
@@ -35,6 +35,11 @@ func (c *connection) connectAndAuth(host string, port int, username, password st
 	c.writer = newProtoWriter(bufio.NewWriter(c.conn))
 
 	err = c.init(username, password)
+	if err != nil {
+		return err
+	}
+
+	err = c.registerSlave(server_id)
 	if err != nil {
 		return err
 	}
@@ -62,9 +67,56 @@ func (c *connection) init(username, password string) (err error) {
 	return ok_packet(c.reader)
 }
 
-func (c *connection) getMasterPosition() (uint64, error) {
+func (c *connection) registerSlave(server_id uint32) (err error) {
+	//register slave
+	//command
+	c.writer.writeTheeByteUInt32(uint32(18))
+	c.writer.WriteByte(0)
+	c.writer.WriteByte(byte(_COM_REGISTER_SLAVE))
+	//server_id
+	c.writer.writeUInt32(server_id)
+	//host
+	c.writer.writeStringLength("")
+	//user
+	c.writer.writeStringLength("")
+	//password
+	c.writer.writeStringLength("")
+	c.writer.writeUInt16(uint16(0))
+	c.writer.writeUInt32(uint32(0))
+	c.writer.writeUInt32(uint32(0))
+	err = c.writer.Flush()
+	if err != nil {
+		return err
+	}
+	return ok_packet(c.reader)
+}
 
-	return 0, nil
+func (c *connection) getMasterStatus() (pos string, filename string, err error) {
+	rs, err := c.query("SHOW MASTER STATUS")
+	if err != nil {
+		return
+	}
+
+	err = rs.nextRow()
+	if err != nil {
+		return
+	}
+
+	filenameByteAr, _, err := rs.buff.readLenString()
+	filename = string(filenameByteAr)
+	if err != nil {
+		return
+	}
+
+	posAr, _, err := rs.buff.readLenString()
+	pos = string(posAr)
+	if err != nil {
+		return
+	}
+
+	rs.nextRow()
+	rs = nil
+	return
 }
 
 func (c *connection) query(command string) (*resultSet, error) {

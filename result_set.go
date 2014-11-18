@@ -1,14 +1,20 @@
 package mysql_replication_listener
 
-import "fmt"
-
 import (
+	"bufio"
+	"bytes"
+	"errors"
 )
 
 type (
 	resultSet struct {
-		reader  *protoReader
-		columns []*columnSet
+		reader      *protoReader
+		columns     []*columnSet
+		finish      bool
+		sequenceId  byte
+		lastWarning uint16
+		lastStatus  uint16
+		buff        *protoReader
 	}
 
 	columnSet struct {
@@ -24,6 +30,10 @@ type (
 		flags         uint16
 		decimals      byte
 	}
+)
+
+var (
+	EOF_ERR = errors.New("EOF")
 )
 
 func (rs *resultSet) init() error {
@@ -139,14 +149,70 @@ func (rs *resultSet) init() error {
 		rs.columns[i] = cs
 	}
 
+	_, err = rs.reader.readThreeBytesUint32()
+	if err != nil {
+		return err
+	}
+
+	sequenceIdNext, err := rs.reader.Reader.ReadByte()
+	if err != nil {
+		return err
+	}
+
+	if sequenceId != sequenceIdNext {
+		panic("Incorrect sequence")
+	}
+
+	rs.finish = false
+	sequenceIdNext++
+	rs.sequenceId = sequenceIdNext
+
+	eof, err := rs.reader.Reader.ReadByte()
+
+	if err != nil {
+		return err
+	}
+
+	if eof != _MYSQL_EOF {
+		panic("Incorrect EOF packet")
+	}
+
+	rs.lastWarning, err = rs.reader.readUint16()
+	if err != nil {
+		return err
+	}
+	rs.lastStatus, err = rs.reader.readUint16()
+
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (rs *resultSet) read() error {
-	buff := make([]byte, 300)
-	rs.reader.Reader.Read(buff)
+func (rs *resultSet) nextRow() error {
+	length, err := rs.reader.readThreeBytesUint32()
+	if err != nil {
+		return err
+	}
+	sequenceId, err := rs.reader.Reader.ReadByte()
+	if err != nil {
+		return err
+	}
+	if sequenceId != rs.sequenceId {
+		panic("Incorrect seuence")
+	}
+	rs.sequenceId++
+	buff := make([]byte, length)
+	_, err = rs.reader.Reader.Read(buff)
+	if err != nil {
+		return err
+	}
 
-	fmt.Printf("% x \n", buff)
+	if buff[0] == _MYSQL_EOF {
+		return EOF_ERR
+	}
 
+	rs.buff = newProtoReader(bufio.NewReader(bytes.NewBuffer(buff)))
 	return nil
 }

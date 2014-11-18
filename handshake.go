@@ -160,12 +160,12 @@ func (h *pkgHandshake) readServer(r *protoReader) (err error) {
 
 func (h *pkgHandshake) writeServer(r *protoWriter, sequenceId byte, username, password string) (err error) {
 	var packLength uint32 = 4 + 4 + 1 + 23 + uint32(len(username)) + 1
-
 	var encPasswd []byte = []byte{}
 
 	if h.capabilities&_CLIENT_SECURE_CONNECTION == _CLIENT_SECURE_CONNECTION {
 		encPasswd = encryptedPasswd(password, h.auth_plugin_data)
 		packLength += uint32(len(encPasswd)) + 1
+
 	}
 
 	err = r.writeTheeByteUInt32(packLength)

@@ -110,7 +110,7 @@ func (pr *protoReader) readLenString() ([]byte, uint64, error) {
 }
 
 func (pr *protoReader) readIntOrNil() (value uint64, null bool, byteLength byte) {
-	lb, _ := pr.ReadByte()
+	lb, _ := pr.Reader.ReadByte()
 	byteLength = 1
 	switch lb {
 	case 0xFB:

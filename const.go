@@ -64,4 +64,6 @@ const (
 	_MYSQL_TYPE_VAR_STRING  = 0xfd
 	_MYSQL_TYPE_STRING      = 0xfe
 	_MYSQL_TYPE_GEOMETRY    = 0xff
+
+	_MYSQL_EOF = 0xfe
 )

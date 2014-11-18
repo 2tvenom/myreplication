@@ -6,10 +6,18 @@ import (
 )
 
 func TestSendQuery(t *testing.T) {
-	return
 	mockWriter := make([]byte, 0, 100)
 	writer := getProtoWriter(mockWriter)
-	mockReader := make([]byte, 0, 100)
+	mockReader := []byte{
+		0x01, 0x00, 0x00, 0x01, 0x01, 0x27, 0x00, 0x00, 0x02, 0x03, 0x64, 0x65, 0x66,
+		0x00, 0x00, 0x00, 0x11, 0x40, 0x40, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
+		0x5f, 0x63, 0x6f, 0x6d, 0x6d, 0x65, 0x6e, 0x74, 0x00, 0x0c, 0x08, 0x00, 0x1c,
+		0x00, 0x00, 0x00, 0xfd, 0x00, 0x00, 0x1f, 0x00, 0x00, 0x05, 0x00, 0x00, 0x03,
+		0xfe, 0x00, 0x00, 0x02, 0x00, 0x1d, 0x00, 0x00, 0x04, 0x1c, 0x4d, 0x79, 0x53,
+		0x51, 0x4c, 0x20, 0x43, 0x6f, 0x6d, 0x6d, 0x75, 0x6e, 0x69, 0x74, 0x79, 0x20,
+		0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x20, 0x28, 0x47, 0x50, 0x4c, 0x29, 0x05,
+		0x00, 0x00, 0x05, 0xfe, 0x00, 0x00, 0x02, 0x00,
+	}
 	reader := getProtoReader(mockReader)
 
 	command := "select @@version_comment limit 1"
@@ -67,7 +75,6 @@ func TestSendQuery(t *testing.T) {
 }
 
 func TestReceiveQueryDataResultSetOneRowOneColumn(t *testing.T) {
-	return
 	mockWriter := make([]byte, 0, 100)
 	writer := getProtoWriter(mockWriter)
 	mockReader := []byte{
@@ -120,7 +127,8 @@ func TestReceiveQueryDataResultSetOneRowOneColumn(t *testing.T) {
 		//length
 		0x1d, 0x00, 0x00,
 		//sequence id
-		0x04, //data
+		0x04,
+		//data
 		0x1c, 0x4d, 0x79, 0x53, 0x51, 0x4c, 0x20, 0x43, 0x6f, 0x6d, 0x6d, 0x75, 0x6e, 0x69, 0x74, 0x79, 0x20, 0x53,
 		0x65, 0x72, 0x76, 0x65, 0x72, 0x20, 0x28, 0x47, 0x50, 0x4c, 0x29,
 		//length
@@ -177,6 +185,39 @@ func TestReceiveQueryDataResultSetOneRowOneColumn(t *testing.T) {
 				"got", string(*pair.columnPointer),
 			)
 		}
+	}
+
+	stat := rs.nextRow()
+
+	if stat != nil {
+		t.Fatal(
+			"Got incorrect error", stat,
+		)
+	}
+
+	expectedString := "MySQL Community Server (GPL)"
+	str, _, err := rs.buff.readLenString()
+
+	if err != nil {
+		t.Fatal(
+			"Got incorrect error read string", stat,
+		)
+	}
+
+	if string(str) != expectedString {
+		t.Fatal(
+			"Got incorrect data",
+			"expected", expectedString,
+			"got", string(str),
+		)
+	}
+
+	stat = rs.nextRow()
+
+	if stat != EOF_ERR {
+		t.Fatal(
+			"Got incorrect next row", stat,
+		)
 	}
 }
 
@@ -284,5 +325,54 @@ func TestReceiveQueryDataResultSetOneRowManyColumns(t *testing.T) {
 				"got", string(*pair.columnPointer),
 			)
 		}
+	}
+	stat := rs.nextRow()
+
+	if stat != nil {
+		t.Fatal(
+			"Got incorrect error", stat,
+		)
+	}
+
+	expectedString := "(Ubuntu)"
+	str, _, err := rs.buff.readLenString()
+
+	if err != nil {
+		t.Fatal(
+			"Got incorrect error read string", stat,
+		)
+	}
+
+	if string(str) != expectedString {
+		t.Fatal(
+			"Got incorrect data",
+			"expected", expectedString,
+			"got", string(str),
+		)
+	}
+
+	expectedString = "5.5.38-0ubuntu0.14.04.1-log"
+	str, _, err = rs.buff.readLenString()
+
+	if err != nil {
+		t.Fatal(
+			"Got incorrect error read string", stat,
+		)
+	}
+
+	if string(str) != expectedString {
+		t.Fatal(
+			"Got incorrect data",
+			"expected", expectedString,
+			"got", string(str),
+		)
+	}
+
+	stat = rs.nextRow()
+
+	if stat != EOF_ERR {
+		t.Fatal(
+			"Got incorrect next row", stat,
+		)
 	}
 }
