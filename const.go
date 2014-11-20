@@ -66,4 +66,41 @@ const (
 	_MYSQL_TYPE_GEOMETRY    = 0xff
 
 	_MYSQL_EOF = 0xfe
+
+	_UNKNOWN_EVENT            = 0x00
+	_START_EVENT_V3           = 0x01
+	_QUERY_EVENT              = 0x02
+	_STOP_EVENT               = 0x03
+	_ROTATE_EVENT             = 0x04
+	_INTVAR_EVENT             = 0x05
+	_LOAD_EVENT               = 0x06
+	_SLAVE_EVENT              = 0x07
+	_CREATE_FILE_EVENT        = 0x08
+	_APPEND_BLOCK_EVENT       = 0x09
+	_EXEC_LOAD_EVENT          = 0x0a
+	_DELETE_FILE_EVENT        = 0x0b
+	_NEW_LOAD_EVENT           = 0x0c
+	_RAND_EVENT               = 0x0d
+	_USER_VAR_EVENT           = 0x0e
+	_FORMAT_DESCRIPTION_EVENT = 0x0f
+	_XID_EVENT                = 0x10
+	_BEGIN_LOAD_QUERY_EVENT   = 0x11
+	_EXECUTE_LOAD_QUERY_EVENT = 0x12
+	_TABLE_MAP_EVENT          = 0x13
+	_WRITE_ROWS_EVENTv0       = 0x14
+	_UPDATE_ROWS_EVENTv0      = 0x15
+	_DELETE_ROWS_EVENTv0      = 0x16
+	_WRITE_ROWS_EVENTv1       = 0x17
+	_UPDATE_ROWS_EVENTv1      = 0x18
+	_DELETE_ROWS_EVENTv1      = 0x19
+	_INCIDENT_EVENT           = 0x1a
+	_HEARTBEAT_EVENT          = 0x1b
+	_IGNORABLE_EVENT          = 0x1c
+	_ROWS_QUERY_EVENT         = 0x1d
+	_WRITE_ROWS_EVENTv2       = 0x1e
+	_UPDATE_ROWS_EVENTv2      = 0x1f
+	_DELETE_ROWS_EVENTv2      = 0x20
+	_GTID_EVENT               = 0x21
+	_ANONYMOUS_GTID_EVENT     = 0x22
+	_PREVIOUS_GTIDS_EVENT     = 0x23
 )
