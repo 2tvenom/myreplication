@@ -17,9 +17,8 @@ func newProtoWriter(bufio *bufio.Writer) *protoWriter {
 func (pw *protoWriter) writeUInt64(data uint64) error {
 	buff := make([]byte, 8, 8)
 
-	for i := 0; i < 8; i++ {
-		buff[i] = byte(data >> uint(i*8))
-	}
+	writeUInt64(buff, data)
+
 	_, err := pw.Write(buff)
 	return err
 }

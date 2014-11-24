@@ -1,6 +1,7 @@
 package mysql_replication_listener
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
 )
@@ -40,9 +41,12 @@ func TestHandshakeRead(t *testing.T) {
 		0x6d, 0x79, 0x73, 0x71, 0x6c, 0x5f, 0x6e, 0x61, 0x74, 0x69, 0x76, 0x65, 0x5f, 0x70, 0x61, 0x73, 0x73,
 		0x77, 0x6f, 0x72, 0x64, 0x00,
 	}
-	reader := getProtoReader(mockHandshake)
+
+	packReader := newPackReader(bytes.NewBuffer(mockHandshake))
+	pack, _ := packReader.readNextPack()
+
 	handshake := newHandshake()
-	err := handshake.readServer(reader)
+	err := handshake.readServer(pack)
 
 	if err != nil {
 		t.Fatal("Handshake read fail", err)
@@ -87,27 +91,15 @@ func TestHandshakeRead(t *testing.T) {
 func TestHandshakeWrite(t *testing.T) {
 	username := "test"
 	password := "test"
-	result := make([]byte, 0, 100)
 
-	writer := getProtoWriter(result)
 	handshake := newHandshake()
 	handshake.auth_plugin_data = []byte("test")
 	handshake.character_set = 2
 	handshake.capabilities = _CLIENT_SECURE_CONNECTION
 
-	sequenceId := byte(10)
-
-	err := handshake.writeServer(writer, sequenceId, username, password)
-
-	if err != nil {
-		t.Fatal("Handshake write fail", err)
-	}
-
-	err = writer.Flush()
-
-	if err != nil {
-		t.Fatal("Handshake flush fail", err)
-	}
+	pack := handshake.writeServer(username, password)
+	pack.setSequence(byte(5))
+	result := pack.packBytes()
 
 	//Capability test
 	expectedCapability := []byte{0xD7, 0xF7, 0x03, 0x00}
@@ -207,11 +199,10 @@ func TestHandshakeWrite(t *testing.T) {
 	}
 
 	//sequence id
-	if result[3:4][0] != sequenceId {
+	if result[3:4][0] != pack.getSequence() {
 		t.Fatal("Handshake incorrect sequence id",
-			"expected", sequenceId,
+			"expected", pack.getSequence(),
 			"got", result[3:4][0],
 		)
 	}
-
 }

@@ -47,9 +47,9 @@ type (
 		schemaLength     byte
 		errorCode        uint16
 		statusVarsLength uint16
-		statusVars		 []byte
-		schema			 []byte
-		query			 []byte
+		statusVars       []byte
+		schema           []byte
+		query            []byte
 	}
 )
 

@@ -23,98 +23,48 @@ func newHandshake() *pkgHandshake {
 	return &pkgHandshake{}
 }
 
-func (h *pkgHandshake) readServer(r *protoReader) (err error) {
-	length, err := r.readThreeBytesUint32()
-
-	if err != nil {
-		return
-	}
-
-	_, err = r.Reader.ReadByte()
-
-	if err != nil {
-		return
-	}
-
-	h.protocol_version, err = r.ReadByte()
+func (h *pkgHandshake) readServer(r *pack) (err error) {
+	r.readByte(&h.protocol_version)
 	if h.protocol_version != _HANDSHAKE_VERSION_10 {
 		panic("Support only HandshakeV10")
 	}
-	length--
-	if err != nil {
-		return
-	}
 
 	h.server_version, err = r.readNilString()
-	length -= uint32(len(h.server_version))
+
 	if err != nil {
 		return
 	}
 
-	h.connection_id, err = r.readUint32()
-	length -= 4
-	if err != nil {
-		return
-	}
+	r.readUint32(&h.connection_id)
 
 	h.auth_plugin_data = make([]byte, 8)
-	_, err = r.Reader.Read(h.auth_plugin_data)
+	_, err = r.Buffer.Read(h.auth_plugin_data)
 
 	if err != nil {
 		return
 	}
-
-	length -= 8
 
 	//skip one
-	r.Reader.ReadByte()
-	length -= 1
+	r.Buffer.ReadByte()
 
-	capOne, err := r.readUint16()
-	if err != nil {
-		return
-	}
+	var capOne uint16
+	r.readUint16(&capOne)
 
 	h.capabilities = uint32(capOne)
-	length -= 2
 
-	if length == 0 {
-		return
-	}
+	h.character_set, _ = r.Buffer.ReadByte()
 
-	h.character_set, err = r.Reader.ReadByte()
+	r.readUint16(&h.status_flags)
 
-	if err != nil {
-		return
-	}
+	var capSecond uint16
+	r.readUint16(&capSecond)
 
-	h.status_flags, err = r.readUint16()
-
-	if err != nil {
-		return
-	}
-
-	capSecond, err := r.readUint16()
-
-	if err != nil {
-		return
-	}
 	h.capabilities = h.capabilities | (uint32(capSecond) << 8)
-	length -= 2
 
-	lengthAuthPluginData, err := r.Reader.ReadByte()
-	length--
-	if err != nil {
-		return
-	}
+	lengthAuthPluginData, _ := r.Buffer.ReadByte()
 
 	filler := make([]byte, 10)
-	_, err = r.Reader.Read(filler)
-	length -= 10
-	filler = nil
-	if err != nil {
-		return
-	}
+	r.Buffer.Read(filler)
 
 	if h.capabilities&_CLIENT_SECURE_CONNECTION == _CLIENT_SECURE_CONNECTION {
 		if lengthAuthPluginData > 0 && (13 < lengthAuthPluginData-8) {
@@ -124,86 +74,40 @@ func (h *pkgHandshake) readServer(r *protoReader) (err error) {
 		}
 
 		auth_plugin_data_2 := make([]byte, lengthAuthPluginData-1)
-		_, err = r.Reader.Read(auth_plugin_data_2)
+		_, err = r.Buffer.Read(auth_plugin_data_2)
 
 		if err != nil {
 			return err
 		}
 
 		h.auth_plugin_data = append(h.auth_plugin_data, auth_plugin_data_2...)
-
-		length -= uint32(lengthAuthPluginData)
 	}
 
 	if h.capabilities&_CLIENT_PLUGIN_AUTH == _CLIENT_PLUGIN_AUTH {
 		h.auth_plugin_name, err = r.readNilString()
-		println("--")
-		if err != nil {
-			return err
-		}
-		length -= uint32(len(h.auth_plugin_name))
 	}
 
-	if length < 0 {
-		panic("Incorrect length")
-	}
-
-	if length == 0 {
-		return
-	}
-
-	devNullBuff := make([]byte, length)
-	r.Reader.Read(devNullBuff)
-	devNullBuff = nil
 	return
 }
 
-func (h *pkgHandshake) writeServer(r *protoWriter, sequenceId byte, username, password string) (err error) {
-	var packLength uint32 = 4 + 4 + 1 + 23 + uint32(len(username)) + 1
+func (h *pkgHandshake) writeServer(username, password string) *pack {
 	var encPasswd []byte = []byte{}
 
 	if h.capabilities&_CLIENT_SECURE_CONNECTION == _CLIENT_SECURE_CONNECTION {
 		encPasswd = encryptedPasswd(password, h.auth_plugin_data)
-		packLength += uint32(len(encPasswd)) + 1
-
 	}
 
-	err = r.writeTheeByteUInt32(packLength)
+	pack := newPack()
+	pack.writeUInt32(_CLIENT_ALL_FLAGS)
+	pack.writeUInt32(_MAX_PACK_SIZE)
+	pack.WriteByte(h.character_set)
+	pack.Write(make([]byte, 23, 23))
+	pack.writeStringNil(username)
 
-	if err != nil {
-		return
-	}
-
-	err = r.Writer.WriteByte(sequenceId)
-
-	if err != nil {
-		return
-	}
-
-	err = r.writeUInt32(_CLIENT_ALL_FLAGS)
-	if err != nil {
-		return
-	}
-	err = r.writeUInt32(_MAX_PACK_SIZE)
-	if err != nil {
-		return
-	}
-
-	err = r.WriteByte(h.character_set)
-	if err != nil {
-		return
-	}
-
-	_, err = r.Write(make([]byte, 23, 23))
-	if err != nil {
-		return
-	}
-
-	r.writeStringNil(username)
 	if h.capabilities&_CLIENT_SECURE_CONNECTION == _CLIENT_SECURE_CONNECTION {
-		r.Writer.WriteByte(byte(len(encPasswd)))
-		r.Writer.Write(encPasswd)
+		pack.WriteByte(byte(len(encPasswd)))
+		pack.Write(encPasswd)
 	}
 
-	return r.Flush()
+	return pack
 }

@@ -8,7 +8,10 @@ import (
 
 type (
 	connection struct {
-		conn           net.Conn
+		conn       net.Conn
+		packReader *packReader
+		packWriter *packWriter
+
 		handshake      *pkgHandshake
 		reader         *protoReader
 		writer         *protoWriter
@@ -32,6 +35,8 @@ func (c *connection) connectAndAuth(host string, port int, username, password st
 	}
 	c.conn = conn
 
+	c.packReader = newPackReader(conn)
+	c.packWriter = newPackWriter(conn)
 	c.reader = newProtoReader(bufio.NewReader(c.conn))
 	c.writer = newProtoWriter(bufio.NewWriter(c.conn))
 
@@ -49,23 +54,32 @@ func (c *connection) connectAndAuth(host string, port int, username, password st
 }
 
 func (c *connection) init(username, password string) (err error) {
+	pack, err := c.packReader.readNextPack()
+	if err != nil {
+		return err
+	}
 	//receive handshake
 	//get handshake data and parse
-	err = c.handshake.readServer(c.reader)
+	err = c.handshake.readServer(pack)
 
 	if err != nil {
 		return
 	}
 
 	//prepare and buff handshake auth response
-	c.handshake.writeServer(c.writer, byte(1), username, password)
-	err = c.writer.Flush()
+	pack = c.handshake.writeServer(username, password)
+	err = c.packWriter.flush(pack)
 
 	if err != nil {
 		return
 	}
 
-	return ok_packet(c.reader)
+	pack, err := c.packReader.readNextPack()
+	if err != nil {
+		return err
+	}
+
+	return pack.isError()
 }
 
 func (c *connection) registerSlave(server_id uint32) (err error) {
