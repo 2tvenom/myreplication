@@ -1,25 +1,28 @@
 package mysql_replication_listener
 
-func registerSlave(writer *protoWriter, reader *protoReader, server_id uint32) (err error) {
+type (
+	registerSlave struct {
+	}
+)
+
+func (rs *registerSlave) writeServer(server_id uint32) *pack {
 	//register slave
 	//command
-	writer.writeTheeByteUInt32(uint32(18))
-	writer.WriteByte(0)
-	writer.WriteByte(byte(_COM_REGISTER_SLAVE))
-	//server_id
-	writer.writeUInt32(server_id)
+
+	pack := newPack()
+	pack.WriteByte(byte(_COM_REGISTER_SLAVE))
+	pack.writeUInt32(server_id)
 	//host
-	writer.writeStringLength("")
+	pack.writeStringLength("")
 	//user
-	writer.writeStringLength("")
+	pack.writeStringLength("")
 	//password
-	writer.writeStringLength("")
-	writer.writeUInt16(uint16(0))
-	writer.writeUInt32(uint32(0))
-	writer.writeUInt32(uint32(0))
-	err = writer.Flush()
-	if err != nil {
-		return err
-	}
-	return ok_packet(reader)
+	pack.writeStringLength("")
+	//slaves mysql port
+	pack.writeUInt16(uint16(0))
+	//replication rank
+	pack.writeUInt32(uint32(0))
+	//master id
+	pack.writeUInt32(uint32(0))
+	return pack
 }

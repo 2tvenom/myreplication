@@ -121,6 +121,51 @@ func (r *pack) readNilString() ([]byte, error) {
 	return buff[0 : len(buff)-1], nil
 }
 
+func (r *pack) readStringLength() ([]byte, error) {
+	var (
+		length uint64
+		null   bool
+	)
+
+	err := r.readIntLengthOrNil(&length, &null)
+
+	if err != nil {
+		return []byte{}, err
+	}
+
+	if length == 0 {
+		return []byte{}, nil
+	}
+
+	return r.Next(int(length)), nil
+}
+
+func (r *pack) readIntLengthOrNil(value *uint64, null *bool) error {
+	lb, err := r.ReadByte()
+
+	if err != nil {
+		return err
+	}
+
+	switch lb {
+	case 0xFB:
+		*null = true
+	case 0xFC:
+		var val uint16
+		r.readUint16(&val)
+		*value = uint64(val)
+	case 0xFD:
+		var val uint32
+		r.readThreeByteUint32(&val)
+		*value = uint64(val)
+	case 0xFE:
+		r.readUint64(value)
+	default:
+		*value = uint64(lb)
+	}
+	return nil
+}
+
 func (r *pack) writeUInt16(data uint16) error {
 	buff := make([]byte, 2)
 
@@ -164,6 +209,22 @@ func (r *pack) writeStringNil(data string) error {
 	return err
 }
 
+func (r *pack) writeStringLength(data string) error {
+	length := writeLengthInt(uint64(len(data)))
+
+	_, err := r.Write(length)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.Write([]byte(data))
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
 func (r *pack) packBytes() []byte {
 	buff := r.Bytes()
 	writeThreeByteUInt32(buff, uint32(len(buff)-4))
@@ -172,16 +233,15 @@ func (r *pack) packBytes() []byte {
 }
 
 func (r *pack) isError() error {
-	code, _ := r.ReadByte()
-	if code == 0x00 {
-		return nil
-	} else if code == 0xFF {
+	if r.buff[0] == _MYSQL_ERR {
 		errPack := &errPacket{}
-		r.readUint16(&errPack.code)
-		errPack.description = r.Buffer.Bytes()
+		readUint16(r.buff[1:3], &errPack.code)
+		errPack.description = r.buff[3:]
 		return errPack
-	} else {
-		panic("Incorrect ok/err packet")
 	}
 	return nil
+}
+
+func (r *pack) isEOF() bool {
+	return r.buff[0] == _MYSQL_EOF
 }

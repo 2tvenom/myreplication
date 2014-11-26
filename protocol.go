@@ -94,6 +94,27 @@ func writeUInt64(buff []byte, data uint64) {
 	}
 }
 
+func writeLengthInt(i uint64) []byte {
+	var buff []byte
+	switch {
+	case i <= 250:
+		buff = []byte{byte(i)}
+	case i <= 0xffff:
+		buff = make([]byte, 3)
+		buff[0] = byte(0xFC)
+		writeUInt16(buff[1:3], uint16(i))
+	case i <= 0xffffff:
+		buff = make([]byte, 4)
+		buff[0] = byte(0xFD)
+		writeThreeByteUInt32(buff[1:4], uint32(i))
+	default:
+		buff = make([]byte, 9)
+		buff[0] = byte(0xFE)
+		writeUInt64(buff[1:9], i)
+	}
+	return buff
+}
+
 //#############################################
 
 func (pr *protoReader) readThreeBytesUint32() (uint32, error) {

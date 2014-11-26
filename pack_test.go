@@ -227,12 +227,100 @@ func TestPackReadUint64(t *testing.T) {
 	}
 }
 
-func TestNilString(t *testing.T) {
+func TestReadIntLengthOrNil(t *testing.T) {
 	mockBuff := []byte{
-		0x1C,
+		//pack 0, nil length encoded integer
+		0x01, 0x00, 0x00,
+		0x00,
+		0xFB,
+		//pack 1, 29 integer
+		0x01, 0x00, 0x00,
+		0x01,
+		0x1D,
+		//pack 2, 251 integer
+		0x03, 0x00, 0x00,
+		0x02,
+		0xFC, 0xFB, 0x00,
+		//pack 3, 3443318 integer
+		0x04, 0x00, 0x00,
+		0x03,
+		0xFD, 0x76, 0x8A, 0x34,
+		//pack 4, 2332321241244333252 integer
+		0x09, 0x00, 0x00,
+		0x03,
+		0xFE, 0xC4, 0x74, 0x77, 0xCE, 0xCF, 0x11, 0x5E, 0x20,
+	}
+	reader := newPackReader(bytes.NewBuffer(mockBuff))
+
+	var (
+		null   bool
+		result uint64
+	)
+
+	type (
+		expectedPair struct {
+			null   bool
+			result uint64
+		}
+	)
+
+	testsCollection := []*expectedPair{
+		&expectedPair{true, 0},
+		&expectedPair{false, 29},
+		&expectedPair{false, 251},
+		&expectedPair{false, 3443318},
+		&expectedPair{false, 2332321241244333252},
+	}
+
+	for i, test := range testsCollection {
+
+		t.Log("length int. Test pack", i, "with nil:", test.null, "result:", test.result)
+
+		null = false
+		result = 0
+
+		pack, err := reader.readNextPack()
+
+		if err != nil {
+			t.Fatal(
+				"Error read pack:", err,
+			)
+		}
+
+		err = pack.readIntLengthOrNil(&result, &null)
+
+		if err != nil {
+			t.Error(
+				"Got error", err,
+			)
+		}
+
+		if null != test.null {
+			t.Error(
+				"Incorrect nil",
+				"expected", test.null,
+				"got", null,
+			)
+		}
+
+		if result != test.result {
+			t.Error(
+				"Incorrect result",
+				"expected", test.result,
+				"got", result,
+			)
+		}
+	}
+}
+
+func TestReadNilString(t *testing.T) {
+	mockBuff := []byte{
+		0x20,
 		0x00, 0x00, 0x0a,
 		0x35, 0x2e, 0x35, 0x2e, 0x33, 0x38, 0x2d, 0x30, 0x75, 0x62, 0x75, 0x6e, 0x74, 0x75, 0x30, 0x2e, 0x31, 0x34,
 		0x2e, 0x30, 0x34, 0x2e, 0x31, 0x2d, 0x6c, 0x6f, 0x67, 0x00,
+		//garbage byte
+		0x35, 0x2e, 0x35, 0x2e,
 	}
 
 	reader := newPackReader(bytes.NewBuffer(mockBuff))
@@ -242,6 +330,33 @@ func TestNilString(t *testing.T) {
 	expected := []byte("5.5.38-0ubuntu0.14.04.1-log")
 
 	result, err := pack.readNilString()
+
+	if err != nil {
+		t.Error("Got error", err)
+	}
+
+	if !reflect.DeepEqual(expected, result) {
+		t.Error("Expected", string(expected), "got", string(result))
+	}
+}
+
+func TestReadStringLength(t *testing.T) {
+	mockBuff := []byte{
+		0x1D,
+		0x00, 0x00, 0x0a,
+		0x1B, 0x35, 0x2e, 0x35, 0x2e, 0x33, 0x38, 0x2d, 0x30, 0x75, 0x62, 0x75, 0x6e, 0x74, 0x75, 0x30, 0x2e, 0x31, 0x34,
+		0x2e, 0x30, 0x34, 0x2e, 0x31, 0x2d, 0x6c, 0x6f, 0x67,
+		//garbage byte
+		0xFF,
+	}
+
+	reader := newPackReader(bytes.NewBuffer(mockBuff))
+
+	pack, _ := reader.readNextPack()
+
+	expected := []byte("5.5.38-0ubuntu0.14.04.1-log")
+
+	result, err := pack.readStringLength()
 
 	if err != nil {
 		t.Error("Got error", err)
@@ -441,7 +556,27 @@ func TestWriteNilString(t *testing.T) {
 	}
 }
 
-func TestPackWithlLength(t *testing.T) {
+func TestWriteStringLength(t *testing.T) {
+	pack := newPack()
+
+	expected := []byte{
+		0x00, 0x00, 0x00,
+		0x00,
+		0x05, 0x68, 0x65, 0x6C, 0x6C, 0x6F,
+	}
+
+	err := pack.writeStringLength("hello")
+
+	if err != nil {
+		t.Error("Got error", err)
+	}
+
+	if !reflect.DeepEqual(expected, pack.Bytes()) {
+		t.Error("Expected", expected, "got", pack.Bytes())
+	}
+}
+
+func TestPackWithLength(t *testing.T) {
 	pack := newPack()
 	pack.setSequence(byte(10))
 
@@ -536,5 +671,27 @@ func TestOkPacketError(t *testing.T) {
 			"expected", errorText,
 			"got", err.Error(),
 		)
+	}
+}
+
+func TestEOFPacket(t *testing.T) {
+	mockBuff := []byte{
+		//length
+		0x05, 0x00, 0x00,
+		//sequence
+		0x01,
+		//EOF
+		0xFE,
+		//warning
+		0x00, 0x00,
+		//status
+		0x02, 0x00,
+	}
+	reader := newPackReader(bytes.NewBuffer(mockBuff))
+
+	pack, _ := reader.readNextPack()
+
+	if !pack.isEOF() {
+		t.Error("packet is not EOF")
 	}
 }

@@ -119,6 +119,36 @@ func TestWriteUint64(t *testing.T) {
 	}
 }
 
+func TestWriteLengthInt(t *testing.T) {
+	expected := []byte{0x0A}
+	result := writeLengthInt(uint64(10))
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Error("Expected", expected, "got", result)
+	}
+
+	expected = []byte{0xFC, 0x1D, 0x86}
+	result = writeLengthInt(uint64(34333))
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Error("Expected", expected, "got", result)
+	}
+
+	expected = []byte{0xFD, 0x76, 0x8A, 0x34}
+	result = writeLengthInt(uint64(3443318))
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Error("Expected", expected, "got", result)
+	}
+
+	expected = []byte{0xFE, 0xC4, 0x74, 0x77, 0xCE, 0xCF, 0x11, 0x5E, 0x20}
+	result = writeLengthInt(uint64(2332321241244333252))
+
+	if !reflect.DeepEqual(result, expected) {
+		t.Error("Expected", expected, "got", result)
+	}
+}
+
 //func TestThreeByteUInt32(t *testing.T) {
 //	mockData := []byte{95, 0, 0}
 //	reader := getProtoReader(mockData)

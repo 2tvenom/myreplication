@@ -1,79 +1,63 @@
 package mysql_replication_listener
 
-//
-//import (
-//	"reflect"
-//	"testing"
-//)
-//
-//func TestSendQuery(t *testing.T) {
-//	mockWriter := make([]byte, 0, 100)
-//	writer := getProtoWriter(mockWriter)
-//	mockReader := []byte{
-//		0x01, 0x00, 0x00, 0x01, 0x01, 0x27, 0x00, 0x00, 0x02, 0x03, 0x64, 0x65, 0x66,
-//		0x00, 0x00, 0x00, 0x11, 0x40, 0x40, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
-//		0x5f, 0x63, 0x6f, 0x6d, 0x6d, 0x65, 0x6e, 0x74, 0x00, 0x0c, 0x08, 0x00, 0x1c,
-//		0x00, 0x00, 0x00, 0xfd, 0x00, 0x00, 0x1f, 0x00, 0x00, 0x05, 0x00, 0x00, 0x03,
-//		0xfe, 0x00, 0x00, 0x02, 0x00, 0x1d, 0x00, 0x00, 0x04, 0x1c, 0x4d, 0x79, 0x53,
-//		0x51, 0x4c, 0x20, 0x43, 0x6f, 0x6d, 0x6d, 0x75, 0x6e, 0x69, 0x74, 0x79, 0x20,
-//		0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x20, 0x28, 0x47, 0x50, 0x4c, 0x29, 0x05,
-//		0x00, 0x00, 0x05, 0xfe, 0x00, 0x00, 0x02, 0x00,
-//	}
-//	reader := getProtoReader(mockReader)
-//
-//	command := "select @@version_comment limit 1"
-//	_, err := query(writer, reader, command)
-//
-//	if err != nil {
-//		t.Fatal("Query got error", err)
-//	}
-//
-//	expectedLength := []byte{0x21, 0x00, 0x00}
-//
-//	offset := 0
-//
-//	if !reflect.DeepEqual(expectedLength, mockWriter[offset:offset+3]) {
-//		t.Fatal(
-//			"Incorrect query length",
-//			"expected", expectedLength,
-//			"got", mockWriter[offset:offset+3],
-//		)
-//	}
-//
-//	offset += 3
-//
-//	expectedSequence := byte(0)
-//
-//	if expectedSequence != mockWriter[offset : offset+1][0] {
-//		t.Fatal(
-//			"Incorrect sequence",
-//			"expected", expectedSequence,
-//			"got", mockWriter[offset : offset+1][0],
-//		)
-//	}
-//
-//	offset++
-//
-//	if _COM_QUERY != mockWriter[offset : offset+1][0] {
-//		t.Fatal(
-//			"Incorrect command",
-//			"expected", _COM_QUERY,
-//			"got", mockWriter[offset : offset+1][0],
-//		)
-//	}
-//
-//	offset++
-//
-//	if command != string(mockWriter[offset:offset+len(command)]) {
-//		t.Fatal(
-//			"Incorrect commnad",
-//			"expected", command,
-//			"got", string(mockWriter[offset:offset+len(command)]),
-//		)
-//	}
-//
-//	offset += len(command)
-//}
+import (
+	"reflect"
+	"testing"
+)
+
+func TestSendQuery(t *testing.T) {
+	command := "select @@version_comment limit 1"
+	q := query{}
+	pack := q.writeServer(command)
+	result := pack.packBytes()
+
+	expectedLength := []byte{0x21, 0x00, 0x00}
+
+	offset := 0
+
+	if !reflect.DeepEqual(expectedLength, result[offset:offset+3]) {
+		t.Fatal(
+			"Incorrect query length",
+			"expected", expectedLength,
+			"got", result[offset:offset+3],
+		)
+	}
+
+	offset += 3
+
+	expectedSequence := byte(0)
+
+	if expectedSequence != result[offset : offset+1][0] {
+		t.Fatal(
+			"Incorrect sequence",
+			"expected", expectedSequence,
+			"got", result[offset : offset+1][0],
+		)
+	}
+
+	offset++
+
+	if _COM_QUERY != result[offset : offset+1][0] {
+		t.Fatal(
+			"Incorrect command",
+			"expected", _COM_QUERY,
+			"got", result[offset : offset+1][0],
+		)
+	}
+
+	offset++
+
+	if command != string(result[offset:offset+len(command)]) {
+		t.Fatal(
+			"Incorrect commnad",
+			"expected", command,
+			"got", string(result[offset:offset+len(command)]),
+		)
+	}
+
+	offset += len(command)
+}
+
 //
 //func TestReceiveQueryDataResultSetOneRowOneColumn(t *testing.T) {
 //	mockWriter := make([]byte, 0, 100)

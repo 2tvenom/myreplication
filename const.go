@@ -65,7 +65,9 @@ const (
 	_MYSQL_TYPE_STRING      = 0xfe
 	_MYSQL_TYPE_GEOMETRY    = 0xff
 
-	_MYSQL_EOF = 0xfe
+	_MYSQL_EOF = 0xFE
+	_MYSQL_OK  = 0x00
+	_MYSQL_ERR = 0xFF
 
 	_UNKNOWN_EVENT            = 0x00
 	_START_EVENT_V3           = 0x01

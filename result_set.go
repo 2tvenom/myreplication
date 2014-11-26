@@ -1,20 +1,17 @@
 package mysql_replication_listener
 
 import (
-	"bufio"
-	"bytes"
 	"errors"
 )
 
 type (
 	resultSet struct {
-		reader      *protoReader
+		reader      *packReader
 		columns     []*columnSet
 		finish      bool
 		sequenceId  byte
 		lastWarning uint16
 		lastStatus  uint16
-		buff        *protoReader
 	}
 
 	columnSet struct {
@@ -37,182 +34,110 @@ var (
 )
 
 func (rs *resultSet) init() error {
-	_, err := rs.reader.readThreeBytesUint32()
+	pack, err := rs.reader.readNextPack()
 	if err != nil {
 		return err
 	}
 
-	sequenceId, err := rs.reader.Reader.ReadByte()
+	queryErr := pack.isError()
+
+	if queryErr != nil {
+		return queryErr
+	}
+
+	var (
+		columnCount uint64
+		null        bool
+	)
+
+	err = pack.readIntLengthOrNil(&columnCount, &null)
+
 	if err != nil {
 		return err
 	}
-	sequenceId++
 
-	columnCount, null, _ := rs.reader.readIntOrNil()
 	if null {
 		panic("Column count got panic")
 	}
 
 	rs.columns = make([]*columnSet, columnCount)
 
-	var i uint64
-	for i = 0; i < columnCount; i++ {
-		length, err := rs.reader.readThreeBytesUint32()
-		if err != nil {
-			return err
-		}
-		sc, err := rs.reader.Reader.ReadByte()
+	sequenceId := pack.getSequence() + 1
 
+	var i uint64
+
+	for i = 0; i < columnCount; i++ {
+		columnPack, err := rs.reader.readNextPack()
 		if err != nil {
 			return err
 		}
-		if sc != sequenceId {
+
+		if columnPack.getSequence() != sequenceId {
 			panic("Incorrect sequence")
 		}
 		sequenceId++
 
 		cs := &columnSet{}
-		var strlength uint64
-		cs.catalog, strlength, err = rs.reader.readLenString()
-		if err != nil {
-			return err
-		}
-		length -= uint32(strlength)
-		cs.schema, strlength, err = rs.reader.readLenString()
-		if err != nil {
-			return err
-		}
-		length -= uint32(strlength)
-		cs.table, strlength, err = rs.reader.readLenString()
-		if err != nil {
-			return err
-		}
-		length -= uint32(strlength)
-		cs.org_table, strlength, err = rs.reader.readLenString()
-		if err != nil {
-			return err
-		}
-		length -= uint32(strlength)
-		cs.name, strlength, err = rs.reader.readLenString()
-		if err != nil {
-			return err
-		}
+		cs.catalog, _ = columnPack.readStringLength()
+		cs.schema, _ = columnPack.readStringLength()
+		cs.table, _ = columnPack.readStringLength()
+		cs.org_table, _ = columnPack.readStringLength()
+		cs.name, _ = columnPack.readStringLength()
+		cs.org_name, _ = columnPack.readStringLength()
+		//filler
+		columnPack.ReadByte()
+		columnPack.readUint16(&cs.character_set)
+		columnPack.readUint32(&cs.column_length)
+		cs.column_type, _ = columnPack.ReadByte()
+		columnPack.readUint16(&cs.flags)
+		cs.decimals, _ = columnPack.ReadByte()
 
-		length -= uint32(strlength)
-
-		cs.org_name, strlength, err = rs.reader.readLenString()
-		if err != nil {
-			return err
-		}
-		length -= uint32(strlength)
-
-		_, err = rs.reader.Reader.ReadByte()
-		if err != nil {
-			return err
-		}
-		length--
-		cs.character_set, err = rs.reader.readUint16()
-		if err != nil {
-			return err
-		}
-		length -= 2
-		cs.column_length, err = rs.reader.readUint32()
-		if err != nil {
-			return err
-		}
-		length -= 4
-		cs.column_type, err = rs.reader.Reader.ReadByte()
-		if err != nil {
-			return err
-		}
-		length--
-		cs.flags, err = rs.reader.readUint16()
-		if err != nil {
-			return err
-		}
-		length -= 2
-		cs.decimals, err = rs.reader.Reader.ReadByte()
-		if err != nil {
-			return err
-		}
-		length--
-		devNullFiller := make([]byte, 2)
-		_, err = rs.reader.Reader.Read(devNullFiller)
-		if err != nil {
-			return err
-		}
-		devNullFiller = nil
-		length -= 2
-		if length != 0 {
-			panic("Incorrect length")
-		}
 		rs.columns[i] = cs
 	}
 
-	_, err = rs.reader.readThreeBytesUint32()
+	pack, err = rs.reader.readNextPack()
+
 	if err != nil {
 		return err
 	}
 
-	sequenceIdNext, err := rs.reader.Reader.ReadByte()
-	if err != nil {
-		return err
-	}
-
-	if sequenceId != sequenceIdNext {
+	if sequenceId != pack.getSequence() {
 		panic("Incorrect sequence")
 	}
-
 	rs.finish = false
-	sequenceIdNext++
-	rs.sequenceId = sequenceIdNext
-
-	eof, err := rs.reader.Reader.ReadByte()
-
-	if err != nil {
-		return err
-	}
+	rs.sequenceId = pack.getSequence()
+	rs.sequenceId++
+	eof, _ := pack.ReadByte()
 
 	if eof != _MYSQL_EOF {
 		panic("Incorrect EOF packet")
 	}
-
-	rs.lastWarning, err = rs.reader.readUint16()
-	if err != nil {
-		return err
-	}
-	rs.lastStatus, err = rs.reader.readUint16()
-
-	if err != nil {
-		return err
-	}
+	pack.readUint16(&rs.lastWarning)
+	pack.readUint16(&rs.lastStatus)
 
 	return nil
 }
 
-func (rs *resultSet) nextRow() error {
-	length, err := rs.reader.readThreeBytesUint32()
-	if err != nil {
-		return err
+func (rs *resultSet) nextRow() (*pack, error) {
+	if rs.finish {
+		return nil, EOF_ERR
 	}
-	sequenceId, err := rs.reader.Reader.ReadByte()
+
+	pack, err := rs.reader.readNextPack()
+
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if sequenceId != rs.sequenceId {
+
+	if pack.getSequence() != rs.sequenceId {
 		panic("Incorrect seuence")
 	}
 	rs.sequenceId++
-	buff := make([]byte, length)
-	_, err = rs.reader.Reader.Read(buff)
-	if err != nil {
-		return err
+
+	if pack.isEOF() {
+		rs.finish = true
+		return nil, EOF_ERR
 	}
 
-	if buff[0] == _MYSQL_EOF {
-		return EOF_ERR
-	}
-
-	rs.buff = newProtoReader(bufio.NewReader(bytes.NewBuffer(buff)))
-	return nil
+	return pack, nil
 }
