@@ -1,9 +1,9 @@
 package mysql_replication_listener
 
 import (
-	"bufio"
 	"fmt"
 	"net"
+	"strconv"
 )
 
 type (
@@ -12,9 +12,6 @@ type (
 		packReader *packReader
 		packWriter *packWriter
 
-		handshake      *pkgHandshake
-		reader         *protoReader
-		writer         *protoWriter
 		masterPosition uint64
 		fileName       string
 	}
@@ -23,11 +20,10 @@ type (
 func newConnection() *connection {
 	return &connection{
 		conn:      nil,
-		handshake: newHandshake(),
 	}
 }
 
-func (c *connection) connectAndAuth(host string, port int, username, password string) error {
+func (c *connection) ConnectAndAuth(host string, port int, username, password string) error {
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
 
 	if err != nil {
@@ -37,8 +33,6 @@ func (c *connection) connectAndAuth(host string, port int, username, password st
 
 	c.packReader = newPackReader(conn)
 	c.packWriter = newPackWriter(conn)
-	c.reader = newProtoReader(bufio.NewReader(c.conn))
-	c.writer = newProtoWriter(bufio.NewWriter(c.conn))
 
 	err = c.init(username, password)
 	if err != nil {
@@ -55,14 +49,17 @@ func (c *connection) init(username, password string) (err error) {
 	}
 	//receive handshake
 	//get handshake data and parse
-	err = c.handshake.readServer(pack)
+	handshake := &pkgHandshake{}
+
+	err = handshake.readServer(pack)
 
 	if err != nil {
 		return
 	}
 
 	//prepare and buff handshake auth response
-	pack = c.handshake.writeServer(username, password)
+	pack = handshake.writeServer(username, password)
+	pack.setSequence(byte(1))
 	err = c.packWriter.flush(pack)
 
 	if err != nil {
@@ -77,57 +74,78 @@ func (c *connection) init(username, password string) (err error) {
 	return pack.isError()
 }
 
-func (c *connection) binlogDump(position uint32, server_id uint32, filename string) (err error) {
-	//register slave
-	packLength := 1 + 4 + 2 + 4 + len(filename)
-	c.writer.writeTheeByteUInt32(uint32(packLength))
-	c.writer.Writer.WriteByte(byte(0))
-	//command
-	c.writer.WriteByte(byte(_COM_BINLOG_DUMP))
-	//position
-	c.writer.writeUInt32(position)
-	//flags
-	c.writer.writeUInt16(uint16(0))
-	//server_id
-	c.writer.writeUInt32(server_id)
-	//file name
-	c.writer.Write([]byte(filename))
-	err = c.writer.Flush()
+func (c *connection) getMasterStatus() (pos uint32, filename string, err error) {
+	rs, err := c.query("SHOW MASTER STATUS")
 	if err != nil {
-		return err
+		return
 	}
-	return nil
-}
 
-func (c *connection) getMasterStatus() (pos string, filename string, err error) {
-	//	rs, err := c.query("SHOW MASTER STATUS")
-	//	if err != nil {
-	//		return
-	//	}
-	//
-	//	err = rs.nextRow()
-	//	if err != nil {
-	//		return
-	//	}
-	//
-	//	filenameByteAr, _, err := rs.buff.readLenString()
-	//	filename = string(filenameByteAr)
-	//	if err != nil {
-	//		return
-	//	}
-	//
-	//	posAr, _, err := rs.buff.readLenString()
-	//	pos = string(posAr)
-	//	if err != nil {
-	//		return
-	//	}
-	//
-	//	rs.nextRow()
-	//	rs = nil
+	pack, err := rs.nextRow()
+	if err != nil {
+		return
+	}
+
+	_fileName, _ := pack.readStringLength()
+	_pos, _ := pack.readStringLength()
+
+	filename = string(_fileName)
+	pos64, err := strconv.ParseUint(string(_pos), 10, 32)
+
+	if err != nil {
+		return
+	}
+
+	pos = uint32(pos64)
+
+	rs.nextRow()
+	rs = nil
 	return
 }
 
 func (c *connection) query(command string) (*resultSet, error) {
-	//	return query(c.writer, c.reader, command)
-	return nil, nil
+	q := &query{}
+	pack := q.writeServer(command)
+	err := c.packWriter.flush(pack)
+	if err != nil {
+		return nil, err
+	}
+
+	rs := &resultSet{}
+	rs.setReader(c.packReader)
+	err = rs.init()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return rs, nil
+}
+
+func (c *connection) startBinlogDump(position uint32, fileName string, serverId uint32) (err error) {
+	register := &registerSlave{}
+	pack := register.writeServer(serverId)
+	err = c.packWriter.flush(pack)
+	if err != nil {
+		return err
+	}
+
+	pack, err = c.packReader.readNextPack()
+	if err != nil {
+		return err
+	}
+
+	err = pack.isError()
+
+	if err != nil {
+		return err
+	}
+
+	startBinLog := &binlogDump{}
+	pack = startBinLog.writeServer(position, fileName, serverId)
+	err = c.packWriter.flush(pack)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

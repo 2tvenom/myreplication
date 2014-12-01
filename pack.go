@@ -43,9 +43,7 @@ func newPack() *pack {
 	pack := &pack{
 		buff: make([]byte, 4),
 	}
-
 	pack.Buffer = bytes.NewBuffer(pack.buff)
-
 	return pack
 }
 
@@ -239,6 +237,7 @@ func (r *pack) isError() error {
 		errPack.description = r.buff[3:]
 		return errPack
 	}
+
 	return nil
 }
 

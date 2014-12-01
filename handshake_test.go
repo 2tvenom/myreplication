@@ -45,7 +45,7 @@ func TestHandshakeRead(t *testing.T) {
 	packReader := newPackReader(bytes.NewBuffer(mockHandshake))
 	pack, _ := packReader.readNextPack()
 
-	handshake := newHandshake()
+	handshake := &pkgHandshake{}
 	err := handshake.readServer(pack)
 
 	if err != nil {
@@ -92,7 +92,7 @@ func TestHandshakeWrite(t *testing.T) {
 	username := "test"
 	password := "test"
 
-	handshake := newHandshake()
+	handshake := &pkgHandshake{}
 	handshake.auth_plugin_data = []byte("test")
 	handshake.character_set = 2
 	handshake.capabilities = _CLIENT_SECURE_CONNECTION

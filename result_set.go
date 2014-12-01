@@ -33,6 +33,10 @@ var (
 	EOF_ERR = errors.New("EOF")
 )
 
+func (rs *resultSet) setReader(reader *packReader){
+	rs.reader = reader
+}
+
 func (rs *resultSet) init() error {
 	pack, err := rs.reader.readNextPack()
 	if err != nil {

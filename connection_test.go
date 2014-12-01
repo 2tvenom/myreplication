@@ -1,34 +1,47 @@
 package mysql_replication_listener
 
-//
-//import (
-//	"strconv"
-//	"testing"
-//)
-//
-//var (
-//	host     = "localhost"
-//	port     = 3306
-//	username = "root"
-//	password = ""
-//)
-//
-//func TestConnectionAndAuth(t *testing.T) {
-//	newConnection := newConnection()
+
+import (
+	"testing"
+	"fmt"
+)
+
+var (
+	host     = "localhost"
+	port     = 3306
+	username = "root"
+	password = ""
+)
+
+func TestConnectionAndAuth(t *testing.T) {
+	newConnection := newConnection()
 //	serverId := uint32(2)
-//	err := newConnection.connectAndAuth(host, port, username, password, serverId)
-//
-//	if err != nil {
-//		t.Fatal("Client not connected and not autentificate to master server with error", err)
-//	}
-//	pos, filename, err := newConnection.getMasterStatus()
-//
-//	if err != nil {
-//		t.Fatal("Master status fail", err)
-//	}
-//	i, err := strconv.Atoi(pos)
-//	newConnection.binlogDump(uint32(i), serverId, filename)
-//
+	err := newConnection.ConnectAndAuth(host, port, username, password)
+
+	if err != nil {
+		t.Fatal("Client not connected and not autentificate to master server with error", err)
+	}
+	pos, filename, err := newConnection.getMasterStatus()
+
+	if err != nil {
+		t.Fatal("Master status fail", err)
+	}
+
+	t.Log("Filename", filename)
+	t.Log("Position", pos)
+
+	err = newConnection.startBinlogDump(pos, filename, uint32(2))
+
+	if err != nil {
+		t.Fatal("Cant start bin log", err)
+	}
+
+	p, _ := newConnection.packReader.readNextPack()
+	fmt.Printf("% x\n", p.buff)
+	p, _ = newConnection.packReader.readNextPack()
+	fmt.Printf("% x\n", p.buff)
+
+
 //	parser := newEventLogParser(newConnection.reader)
 //	for i := 0; i < 5; i++ {
 //		event, _ := parser.read()
@@ -45,11 +58,11 @@ package mysql_replication_listener
 //			println(string(e.query))
 //		}
 //	}
-//
-//	//	rs, err := newConnection.query("SELECT @@version_comment, @@version")
-//	//
-//	//	if err != nil {
-//	//		t.Fatal("Query error", err)
-//	//	}
-//
-//}
+
+	//	rs, err := newConnection.query("SELECT @@version_comment, @@version")
+	//
+	//	if err != nil {
+	//		t.Fatal("Query error", err)
+	//	}
+
+}

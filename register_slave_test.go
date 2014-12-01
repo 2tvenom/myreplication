@@ -51,7 +51,7 @@ func TestRegisterSlave(t *testing.T) {
 	if !reflect.DeepEqual(expectedServerId, result[offset:offset+4]) {
 		t.Fatal(
 			"Incorrect servert id",
-			"expected", expectedLength,
+			"expected", expectedServerId,
 			"got", result[offset:offset+4],
 		)
 	}

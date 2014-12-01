@@ -19,10 +19,6 @@ type (
 	}
 )
 
-func newHandshake() *pkgHandshake {
-	return &pkgHandshake{}
-}
-
 func (h *pkgHandshake) readServer(r *pack) (err error) {
 	r.readByte(&h.protocol_version)
 	if h.protocol_version != _HANDSHAKE_VERSION_10 {
