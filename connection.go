@@ -121,31 +121,33 @@ func (c *connection) query(command string) (*resultSet, error) {
 	return rs, nil
 }
 
-func (c *connection) startBinlogDump(position uint32, fileName string, serverId uint32) (err error) {
+func (c *connection) startBinlogDump(position uint32, fileName string, serverId uint32) (el *eventLog, err error) {
 	register := &registerSlave{}
 	pack := register.writeServer(serverId)
 	err = c.packWriter.flush(pack)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	pack, err = c.packReader.readNextPack()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = pack.isError()
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	startBinLog := &binlogDump{}
 	pack = startBinLog.writeServer(position, fileName, serverId)
 	err = c.packWriter.flush(pack)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	el = newEventLog(c)
+
+	return el, nil
 }

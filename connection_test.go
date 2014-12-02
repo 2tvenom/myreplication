@@ -3,7 +3,6 @@ package mysql_replication_listener
 
 import (
 	"testing"
-	"fmt"
 )
 
 var (
@@ -30,16 +29,14 @@ func TestConnectionAndAuth(t *testing.T) {
 	t.Log("Filename", filename)
 	t.Log("Position", pos)
 
-	err = newConnection.startBinlogDump(pos, filename, uint32(2))
+	el, err := newConnection.startBinlogDump(pos, filename, uint32(2))
 
 	if err != nil {
 		t.Fatal("Cant start bin log", err)
 	}
 
-	p, _ := newConnection.packReader.readNextPack()
-	fmt.Printf("% x\n", p.buff)
-	p, _ = newConnection.packReader.readNextPack()
-	fmt.Printf("% x\n", p.buff)
+	println(el.binlogVersion)
+//	el.start()
 
 
 //	parser := newEventLogParser(newConnection.reader)
