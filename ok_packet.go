@@ -12,4 +12,3 @@ type (
 func (e *errPacket) Error() string {
 	return fmt.Sprintf("%s", string(e.description))
 }
-

@@ -1,6 +1,5 @@
 package mysql_replication_listener
 
-
 import (
 	"testing"
 )
@@ -14,7 +13,7 @@ var (
 
 func TestConnectionAndAuth(t *testing.T) {
 	newConnection := newConnection()
-//	serverId := uint32(2)
+	//	serverId := uint32(2)
 	err := newConnection.ConnectAndAuth(host, port, username, password)
 
 	if err != nil {
@@ -36,30 +35,5 @@ func TestConnectionAndAuth(t *testing.T) {
 	}
 
 	println(el.binlogVersion)
-//	el.start()
-
-
-//	parser := newEventLogParser(newConnection.reader)
-//	for i := 0; i < 5; i++ {
-//		event, _ := parser.read()
-//
-//		switch e := event.(type) {
-//		case *eventLogRotateEvent:
-//			println("rotate")
-//		case *eventLogFormatDescriptionEvent:
-//			println("description")
-//		case *eventLogFormatUpdateEventV2:
-//			println(e.columnsCount)
-//			println(e.tableId)
-//		case *eventLogQueryEvent:
-//			println(string(e.query))
-//		}
-//	}
-
-	//	rs, err := newConnection.query("SELECT @@version_comment, @@version")
-	//
-	//	if err != nil {
-	//		t.Fatal("Query error", err)
-	//	}
-
+	//	el.start()
 }

@@ -33,7 +33,7 @@ var (
 	EOF_ERR = errors.New("EOF")
 )
 
-func (rs *resultSet) setReader(reader *packReader){
+func (rs *resultSet) setReader(reader *packReader) {
 	rs.reader = reader
 }
 

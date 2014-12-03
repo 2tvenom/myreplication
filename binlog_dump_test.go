@@ -60,7 +60,6 @@ func TestStartBinLog(t *testing.T) {
 	}
 	offset += 4
 
-
 	expectedFlags := []byte{0x00, 0x00}
 	if !reflect.DeepEqual(expectedFlags, result[offset:offset+2]) {
 		t.Fatal(

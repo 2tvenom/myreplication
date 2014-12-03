@@ -19,7 +19,7 @@ type (
 
 func newConnection() *connection {
 	return &connection{
-		conn:      nil,
+		conn: nil,
 	}
 }
 
