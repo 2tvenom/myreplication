@@ -531,3 +531,111 @@ func TestExecuteLoadQueryEvent(t *testing.T) {
 		)
 	}
 }
+
+func TestUserVarEvent(t *testing.T) {
+	mockHandshake := []byte{
+		//pack header
+		0x2F, 0x00, 0x00,
+		0x01,
+		//event header
+		0x00, 0x47, 0xc0, 0x80, 0x54, 0x0e, 0x01, 0x00, 0x00, 0x00, 0x2e, 0x00, 0x00, 0x00, 0x4c, 0xfd, 0x01, 0x00,
+		0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x76, 0x61, 0x72, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x00, 0x00, 0x21, 0x00,
+		0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x73, 0x73, 0x73, 0x73, 0x73,
+	}
+
+	packReader := newPackReader(bytes.NewBuffer(mockHandshake))
+	pack, _ := packReader.readNextPack()
+
+	header := &eventLogHeader{}
+	header.read(pack)
+
+	userVar := &UserVarEvent{}
+	userVar.eventLogHeader = header
+	userVar.read(pack)
+
+	if userVar.EventType != _USER_VAR_EVENT {
+		t.Fatal(
+			"Incorrect event type",
+			"expected", _USER_VAR_EVENT,
+			"got", userVar.EventType,
+		)
+	}
+
+	expectedName := "var_name"
+
+	if userVar.Name != expectedName {
+		t.Fatal(
+			"Incorrect variable name",
+			"expected", expectedName,
+			"got", userVar.Name,
+		)
+	}
+
+	expectedIsNil := false
+
+	if userVar.IsNil != expectedIsNil {
+		t.Fatal(
+			"Incorrect is_null",
+			"expected", expectedIsNil,
+			"got", userVar.IsNil,
+		)
+	}
+
+	expectedValue := "sssss"
+
+	if userVar.Value != expectedValue {
+		t.Fatal(
+			"Incorrect value",
+			"expected", expectedValue,
+			"got", userVar.Value,
+		)
+	}
+}
+
+func TestRandEvent(t *testing.T) {
+	mockHandshake := []byte{
+		//pack header
+		0x24, 0x00, 0x00,
+		0x01,
+		//event header
+		0x00, 0xc6, 0xce, 0x80, 0x54, 0x0d, 0x01, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x00, 0x9b, 0x02, 0x00, 0x00,
+		0x00, 0x00, 0xbf, 0xfa, 0x4e, 0x1e, 0x00, 0x00, 0x00, 0x00, 0x76, 0x1c, 0x04, 0x3c, 0x00, 0x00, 0x00, 0x00,
+	}
+
+	packReader := newPackReader(bytes.NewBuffer(mockHandshake))
+	pack, _ := packReader.readNextPack()
+
+	header := &eventLogHeader{}
+	header.read(pack)
+
+	rand := &RandEvent{}
+	rand.eventLogHeader = header
+	rand.read(pack)
+
+	if rand.EventType != _RAND_EVENT {
+		t.Fatal(
+			"Incorrect event type",
+			"expected", _RAND_EVENT,
+			"got", rand.EventType,
+		)
+	}
+
+	var expectedSeed1 uint64 = 508492479
+	var expectedSeed2 uint64 = 1006902390
+
+	if rand.Seed1 != expectedSeed1{
+		t.Fatal(
+			"Incorrect seed1",
+			"expected", expectedSeed1,
+			"got", rand.Seed1,
+		)
+	}
+
+	if rand.Seed2 != expectedSeed2{
+		t.Fatal(
+			"Incorrect seed2",
+			"expected", expectedSeed2,
+			"got", rand.Seed2,
+		)
+	}
+}

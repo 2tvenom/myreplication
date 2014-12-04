@@ -2,6 +2,7 @@ package mysql_replication_listener
 
 import (
 	"fmt"
+	"io"
 )
 
 type (
@@ -9,7 +10,7 @@ type (
 		mysqlConnection *connection
 		binlogVersion   uint16
 
-		lastRotatePosition uint64
+		lastRotatePosition uint32
 		lastRotateFileName []byte
 
 		headerQueryEventLength        byte
@@ -76,8 +77,6 @@ type (
 		BlockData string
 	}
 
-	AppendBlockEvent BeginLoadQueryEvent
-
 	ExecuteLoadQueryEvent struct {
 		*eventLogHeader
 		SlaveProxyId     uint32
@@ -92,10 +91,75 @@ type (
 		Query            string
 	}
 
+	UserVarEvent struct {
+		*eventLogHeader
+		Name string
+		IsNil bool
+		Type byte
+		Charset uint32
+		Value string
+		Flags byte
+	}
+
+	IncidentEvent struct {
+		*eventLogHeader
+		Type uint16
+		Message string
+	}
+
+	RandEvent struct {
+		*eventLogHeader
+		Seed1 uint64
+		Seed2 uint64
+	}
+
+	unknownEvent struct {
+		*eventLogHeader
+	}
+
 	binLogEvent interface {
 		read(*pack)
 	}
+
+	AppendBlockEvent BeginLoadQueryEvent
+	ignorableEvent unknownEvent
+	HeartBeatEvent unknownEvent
+	StopEvent unknownEvent
+	slaveEvent unknownEvent
 )
+
+func (event *RandEvent) read(pack *pack) {
+	pack.readUint64(&event.Seed1)
+	pack.readUint64(&event.Seed2)
+}
+
+func (event *IncidentEvent) read(pack *pack) {
+	pack.readUint16(&event.Type)
+	length, _ := pack.ReadByte()
+	event.Message = string(pack.Next(int(length)))
+}
+
+func (event *unknownEvent) read(pack *pack) {
+
+}
+
+func (event *UserVarEvent) read(pack *pack) {
+	var nameLength uint32
+	pack.readUint32(&nameLength)
+	event.Name = string(pack.Next(int(nameLength)))
+	isNull, _ := pack.ReadByte()
+	event.IsNil = isNull == 1
+	if event.IsNil {
+		return
+	}
+
+	event.Type, _ = pack.ReadByte()
+	pack.readUint32(&event.Charset)
+	var length uint32
+	pack.readUint32(&length)
+	event.Value = string(pack.Next(int(length)))
+	event.Flags, _ = pack.ReadByte()
+}
 
 func (event *ExecuteLoadQueryEvent) read(pack *pack) {
 	pack.readUint32(&event.SlaveProxyId)
@@ -171,8 +235,7 @@ func (event *logRotateEvent) read(pack *pack) {
 
 func (event *formatDescriptionEvent) read(pack *pack) {
 	pack.readUint16(&event.binlogVersion)
-	event.mysqlServerVersion = make([]byte, 50)
-	pack.Read(event.mysqlServerVersion)
+	event.mysqlServerVersion = pack.Next(50)
 	pack.readUint32(&event.createTimestamp)
 	length, _ := pack.ReadByte()
 	event.eventTypeHeaderLengths = make([]byte, length)
@@ -207,7 +270,10 @@ func (ev *eventLog) start() {
 	for {
 		event, err := ev.readEvent()
 		if err != nil {
-			println(err.Error())
+			if err == io.EOF {
+				println("EOF")
+				break;
+			}
 		}
 
 		switch e := event.(type) {
@@ -215,14 +281,14 @@ func (ev *eventLog) start() {
 			ev.binlogVersion = e.binlogVersion
 		case *formatDescriptionEvent:
 			ev.binlogVersion = e.binlogVersion
-			//			fmt.Printf("% x\n", e.eventTypeHeaderLengths)
 			ev.headerQueryEventLength = e.eventTypeHeaderLengths[_FORMAT_DESCRIPTION_LENGTH_QUERY_POSITION]
+
 			//			ev.headerDeleteRowsEventV1Length = e.eventTypeHeaderLengths[_FORMAT_DESCRIPTION_LENGTH_DELETEV1_POSITION]
 			//			ev.headerUpdateRowsEventV1Length = e.eventTypeHeaderLengths[_FORMAT_DESCRIPTION_LENGTH_UPDATEV1_POSITION]
 			//			ev.headerWriteRowsEventV1Length = e.eventTypeHeaderLengths[_FORMAT_DESCRIPTION_LENGTH_WRITEV1_POSITION]
 		case *logRotateEvent:
-			ev.lastRotatePosition = e.position
 			ev.lastRotateFileName = e.binlogFileName
+			println("rotate", e.position, string(e.binlogFileName))
 		case *QueryEvent:
 			println(e.Query)
 			//redirect to chan
@@ -242,6 +308,27 @@ func (ev *eventLog) start() {
 		case *ExecuteLoadQueryEvent:
 			println(e.Query)
 			//redirect to chan
+		case *UserVarEvent:
+			println(e.Name,"=", e.Value)
+			//redirect to chan
+		case *StopEvent:
+			//redirect to chan
+			println("stop")
+		case *IncidentEvent :
+			//redirect to chan
+			println("incident")
+		case *RandEvent :
+			//redirect to chan
+			println("rand")
+			////////// trash events
+		case *slaveEvent :
+			//no action
+		case *unknownEvent:
+			//no action
+		case *ignorableEvent:
+			//no action
+		case *HeartBeatEvent:
+			//no action
 		}
 	}
 }
@@ -296,12 +383,45 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 		event = &ExecuteLoadQueryEvent{
 			eventLogHeader: header,
 		}
+	case _USER_VAR_EVENT:
+		event = &UserVarEvent{
+			eventLogHeader: header,
+		}
+	case _UNKNOWN_EVENT:
+		event = &unknownEvent {
+			eventLogHeader: header,
+		}
+	case _IGNORABLE_EVENT:
+		event = &ignorableEvent {
+			eventLogHeader: header,
+		}
+	case _HEARTBEAT_EVENT:
+		event = &HeartBeatEvent {
+			eventLogHeader: header,
+		}
+	case _STOP_EVENT:
+		event = &StopEvent {
+			eventLogHeader: header,
+		}
+	case _INCIDENT_EVENT:
+		event = &IncidentEvent {
+			eventLogHeader: header,
+		}
+	case _SLAVE_EVENT:
+		event = &slaveEvent {
+			eventLogHeader: header,
+		}
+	case _RAND_EVENT:
+		event = &RandEvent {
+			eventLogHeader: header,
+		}
 	default:
 		println("Unknown event")
 		println(fmt.Sprintf("% x\n", pack.buff))
 		return nil, nil
 	}
 
+	ev.lastRotatePosition = header.NextPosition
 	event.read(pack)
 	return event, nil
 }
