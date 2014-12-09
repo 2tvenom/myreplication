@@ -227,6 +227,36 @@ func TestPackReadUint64(t *testing.T) {
 	}
 }
 
+func TestPackReadSixByteUint64(t *testing.T) {
+	mockBuff := []byte{
+		0x08, 0x00, 0x00,
+		0x0a,
+		0x8F, 0x7F, 0xE8, 0x44, 0x9A, 0x27,
+	}
+
+	reader := newPackReader(bytes.NewBuffer(mockBuff))
+
+	pack, _ := reader.readNextPack()
+
+	var expected uint64 = 43543534534543
+	var result uint64
+
+	err := pack.readSixByteUint64(&result)
+	if err != nil {
+		t.Error(
+			"Got error", err,
+		)
+	}
+
+	if result != expected {
+		t.Error(
+			"Incorrect result",
+			"expected", expected,
+			"got", result,
+		)
+	}
+}
+
 func TestReadIntLengthOrNil(t *testing.T) {
 	mockBuff := []byte{
 		//pack 0, nil length encoded integer

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"reflect"
 )
 
 func TestBinlogRotateEvent(t *testing.T) {
@@ -623,7 +624,7 @@ func TestRandEvent(t *testing.T) {
 	var expectedSeed1 uint64 = 508492479
 	var expectedSeed2 uint64 = 1006902390
 
-	if rand.Seed1 != expectedSeed1{
+	if rand.Seed1 != expectedSeed1 {
 		t.Fatal(
 			"Incorrect seed1",
 			"expected", expectedSeed1,
@@ -631,11 +632,231 @@ func TestRandEvent(t *testing.T) {
 		)
 	}
 
-	if rand.Seed2 != expectedSeed2{
+	if rand.Seed2 != expectedSeed2 {
 		t.Fatal(
 			"Incorrect seed2",
 			"expected", expectedSeed2,
 			"got", rand.Seed2,
 		)
 	}
+}
+
+func TestTableMapEvent(t *testing.T) {
+	mockHandshake := []byte{
+		//pack header
+		0x49, 0x00, 0x00,
+		0x01,
+		//event header
+		0x00,
+		0x5d, 0xff, 0x86, 0x54,
+		0x13,
+		0x01, 0x00, 0x00, 0x00,
+		0x48, 0x00, 0x00, 0x00,
+		0x34, 0x06, 0x00, 0x00,
+		0x00, 0x00,
+		//body
+		//table id
+		0x2c, 0x00, 0x00, 0x00, 0x00, 0x00,
+		//flags
+		0x01, 0x00,
+		//schema length
+		0x04,
+		//schema name "test"
+		0x74, 0x65, 0x73, 0x74,
+		//filler
+		0x00,
+		//table name length
+		0x05,
+		//table name "types"
+		0x74, 0x79, 0x70, 0x65, 0x73,
+		//filler
+		0x00,
+		//column count
+		0x13,
+		//column count def
+		0x03, 0x01, 0x01, 0x02, 0x02, 0x09, 0x09, 0x03, 0x03, 0x03, 0x03, 0x08, 0x08, 0xf6, 0xf6, 0x05, 0x05, 0x04, 0x04,
+		//meta info length
+		0x08,
+		//meta info
+		0x0a, 0x00, 0x0a, 0x00, 0x08, 0x08, 0x04, 0x04,
+		//bit mask
+		0x6e, 0xfb, 0x07,
+	}
+
+	packReader := newPackReader(bytes.NewBuffer(mockHandshake))
+	pack, _ := packReader.readNextPack()
+
+	header := &eventLogHeader{}
+	header.read(pack)
+
+	table := &TableMapEvent{}
+	table.eventLogHeader = header
+	table.read(pack)
+
+	if table.EventType != _TABLE_MAP_EVENT {
+		t.Fatal(
+			"Incorrect event type",
+			"expected", _TABLE_MAP_EVENT,
+			"got", table.EventType,
+		)
+	}
+
+	expectedSchema := "test"
+	if table.SchemaName != expectedSchema {
+		t.Fatal(
+			"Incorrect schema name",
+			"expected", expectedSchema,
+			"got", table.SchemaName,
+		)
+	}
+
+	expectedTable := "types"
+	if table.TableName != expectedTable {
+		t.Fatal(
+			"Incorrect table name",
+			"expected", expectedTable,
+			"got", table.TableName,
+		)
+	}
+
+	expectedColumnCount := 19
+	if len(table.Columns) != expectedColumnCount {
+		t.Fatal(
+			"Incorrect column count",
+			"expected", expectedColumnCount,
+			"got", len(table.Columns),
+		)
+	}
+
+	type (
+		TableMapEventTest struct {
+			expectedType   byte
+			expectedIsNull bool
+			expectedMetaInfo       []byte
+		}
+	)
+
+	testsCases := []*TableMapEventTest{
+		&TableMapEventTest{_MYSQL_TYPE_LONG, false, []byte{}},             // `id` int(11) NOT NULL AUTO_INCREMENT,
+		&TableMapEventTest{_MYSQL_TYPE_TINY, true, []byte{}},              // `i1` tinyint(4) DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_TINY, true, []byte{}},              // `i2` tinyint(3) unsigned DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_SHORT, true, []byte{}},             // `i3` smallint(6) DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_SHORT, false, []byte{}},            // `i4` smallint(5) unsigned NOT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_INT24, true, []byte{}},            // `i5` mediumint(9) DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_INT24, true, []byte{}},            // `i6` mediumint(8) unsigned DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONG, false, []byte{}},             // `i7` int(11) NOT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONG, true, []byte{}},              // `i8` int(10) unsigned DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONG, true, []byte{}},              // `i9` int(11) DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONG, false, []byte{}},             // `1i0` int(10) unsigned NOT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONGLONG, true, []byte{}},          // `1i1` bigint(20) DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONGLONG, true, []byte{}},          // `1i2` bigint(20) unsigned DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_NEWDECIMAL, true, []byte{0x0a, 0x00}}, // `1i3` decimal(10,0) DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_NEWDECIMAL, true, []byte{0x0a, 0x00}}, // `1i4` decimal(10,0) unsigned DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_DOUBLE, true, []byte{0x08}},        // `1i5` double DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_DOUBLE, true, []byte{0x08}},        // `1i6` double unsigned DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_FLOAT, true, []byte{0x04}},         // `1i7` float DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_FLOAT, true, []byte{0x04}},         // `1i8` float unsigned DEFAULT NULL,
+	}
+
+	for i, testCase := range testsCases {
+		testColumn := table.Columns[i]
+
+		if testColumn.Type != testCase.expectedType {
+			t.Fatal(
+				"Incorrect columnt type with index", i,
+				"expected", testCase.expectedType,
+				"got", testColumn.Type,
+			)
+		}
+
+		if testColumn.Null != testCase.expectedIsNull {
+			t.Fatal(
+				"Incorrect null flag with index", i,
+				"expected", testCase.expectedIsNull,
+				"got", testColumn.Null,
+			)
+		}
+
+		if !reflect.DeepEqual(testColumn.MetaInfo, testCase.expectedMetaInfo) {
+			t.Fatal(
+				"Incorrect meta info",
+				"expected", testCase.expectedMetaInfo,
+				"got", testColumn.MetaInfo,
+			)
+		}
+	}
+}
+
+func TestUpdateRowsEventV1(t *testing.T) {
+	mockHandshake := []byte{
+		//pack header
+		0xCD, 0x00, 0x00,
+		0x01,
+		//event header
+		0x00,
+		0x3a, 0x02, 0x87, 0x54,
+		0x18,
+		0x01, 0x00, 0x00, 0x00,
+		0xcc, 0x00, 0x00, 0x00,
+		0x64, 0x09, 0x00, 0x00,
+		0x00, 0x00,
+		//body
+		//table id
+		0x2d, 0x00, 0x00, 0x00, 0x00, 0x00,
+		//flags
+		0x01, 0x00,
+		//columns count = 19
+		0x13,
+		//bitmap 1
+		0xff, 0xff, 0xff,
+		//bitmap 2
+		0xff, 0xff, 0xff,
+		//bull bitmap
+		0x00, 0x00, 0xf8,
+
+		0x01, 0x00, 0x00, 0x00,
+		0x01,
+		0x01,
+		0x01, 0x00,
+		0x01, 0x00,
+		0x01, 0x00, 0x00,
+		0x01, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+		0x80, 0x00, 0x00, 0x00, 0x01,
+		0x80, 0x00, 0x00, 0x00, 0x01,
+
+		0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+		0xf0, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0xf0, 0x3f, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00,
+
+		0x80, 0x3f, 0x00, 0x00, 0xf8, 0x01, 0x00, 0x00, 0x00, 0x02, 0x02, 0x02, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x02, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x02, 0x80, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40,
+	}
+
+	packReader := newPackReader(bytes.NewBuffer(mockHandshake))
+	pack, _ := packReader.readNextPack()
+
+	header := &eventLogHeader{}
+	header.read(pack)
+
+	update := &UpdateRowsEvent{}
+	update.setVersion(byte(1))
+	update.setPostHeaderLength(byte(8))
+	update.eventLogHeader = header
+	update.read(pack)
+
+	if update.EventType != _UPDATE_ROWS_EVENTv1 {
+		t.Fatal(
+			"Incorrect event type",
+			"expected", _UPDATE_ROWS_EVENTv1,
+			"got", update.EventType,
+		)
+	}
+
 }

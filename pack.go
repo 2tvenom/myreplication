@@ -104,6 +104,11 @@ func (r *pack) readUint32(dest *uint32) error {
 	return nil
 }
 
+func (r *pack) readSixByteUint64(dest *uint64) error {
+	readSixByteUint64(r.Buffer.Next(6), dest)
+	return nil
+}
+
 func (r *pack) readUint64(dest *uint64) error {
 	readUint64(r.Buffer.Next(8), dest)
 	return nil

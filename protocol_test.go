@@ -91,6 +91,22 @@ func TestWriteUInt32(t *testing.T) {
 	}
 }
 
+func TestReadSixByteUint64(t *testing.T) {
+	mockData := []byte{0x8F, 0x7F, 0xE8, 0x44, 0x9A, 0x27}
+	var expected uint64 = 43543534534543
+	var result uint64
+
+	err := readSixByteUint64(mockData, &result)
+
+	if err != nil {
+		t.Error("Got error", err)
+	}
+
+	if result != expected {
+		t.Error("Expected", expected, "got", result)
+	}
+}
+
 func TestReadUint64(t *testing.T) {
 	mockData := []byte{0xC4, 0x74, 0x77, 0xCE, 0xCF, 0x11, 0x5E, 0x20}
 	var expected uint64 = 2332321241244333252

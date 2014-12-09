@@ -34,6 +34,6 @@ func TestConnectionAndAuth(t *testing.T) {
 		t.Fatal("Cant start bin log", err)
 	}
 
-	println(el.binlogVersion)
-		el.start()
+	println("--", el.binlogVersion, "--")
+	//		el.start()
 }
