@@ -3,6 +3,8 @@ package mysql_replication_listener
 import (
 	"fmt"
 	"io"
+	"math"
+	"strconv"
 )
 
 type (
@@ -115,31 +117,39 @@ type (
 
 	TableMapEvent struct {
 		*eventLogHeader
-		TableId          uint64
-		Flags            uint16
-		SchemaName       string
-		TableName        string
-		Columns          []*TableMapEventColumn
-		columnTypeDef    []byte
-		columnMetaDef    []byte
-		columnNullBitMap []byte
+		TableId    uint64
+		Flags      uint16
+		SchemaName string
+		TableName  string
+		Columns    []*TableMapEventColumn
 	}
 
 	TableMapEventColumn struct {
 		Type     byte
 		MetaInfo []byte
-		Null     bool
+		Nullable bool
 	}
 
-	UpdateRowsEvent struct {
+	rowsEvent struct {
+		*eventLogHeader
+		tableMapEvent    *TableMapEvent
 		postHeaderLength byte
 		version          byte
-		*eventLogHeader
-		TableId              uint64
-		ExtraData            []byte
-		ColumnPresentBitmap1 []byte
-		ColumnPresentBitmap2 []byte
+
+		TableId   uint64
+		Flags     uint16
+		ExtraData []byte
+		Values    [][]*RowsEventValue
 	}
+
+	RowsEventValue struct {
+		ColumnId int
+		IsNull   bool
+		Value    interface{}
+		Type     byte
+	}
+
+	UpdateRowsEvent rowsEvent
 
 	unknownEvent struct {
 		*eventLogHeader
@@ -156,15 +166,23 @@ type (
 	slaveEvent       unknownEvent
 )
 
-func (event *UpdateRowsEvent) setPostHeaderLength(length byte) {
+func (event *rowsEvent) setTableMapEvent(tableMapEvent *TableMapEvent) {
+	event.tableMapEvent = tableMapEvent
+}
+
+func (event *rowsEvent) setPostHeaderLength(length byte) {
 	event.postHeaderLength = length
 }
 
-func (event *UpdateRowsEvent) setVersion(version byte) {
+func (event *rowsEvent) setVersion(version byte) {
 	event.version = version
 }
 
-func (event *UpdateRowsEvent) read(pack *pack) {
+func (event *rowsEvent) IsTrue(columnId int, bitmap []byte) bool {
+	return (bitmap[columnId/8]>>uint8(columnId%8))&1 == 1
+}
+
+func (event *rowsEvent) read(pack *pack) {
 	if event.postHeaderLength == 6 {
 		var tableId uint32
 		pack.readUint32(&tableId)
@@ -172,6 +190,8 @@ func (event *UpdateRowsEvent) read(pack *pack) {
 	} else {
 		pack.readSixByteUint64(&event.TableId)
 	}
+
+	pack.readUint16(&event.Flags)
 
 	if event.version == 2 {
 		var extraDataLength uint16
@@ -188,11 +208,86 @@ func (event *UpdateRowsEvent) read(pack *pack) {
 
 	bitMapLength := int((columnCount + 7) / 8)
 
-	event.ColumnPresentBitmap1 = pack.Next(bitMapLength)
-	if event.version >= 1 {
-		event.ColumnPresentBitmap2 = pack.Next(bitMapLength)
+	var columnPresentBitmap1, nullBitmap1 []byte
+
+	columnPresentBitmap1 = pack.Next(bitMapLength)
+
+	if event.EventType == _UPDATE_ROWS_EVENTv1 || event.EventType == _UPDATE_ROWS_EVENTv2 {
+		//		columnPresentBitmap2 = pack.Next(bitMapLength)
 	}
 
+	event.Values = [][]*RowsEventValue{}
+
+	for {
+		nullBitmap1 = pack.Next(bitMapLength)
+
+		row := []*RowsEventValue{}
+		for i, column := range event.tableMapEvent.Columns {
+			if !event.IsTrue(i, columnPresentBitmap1) {
+				continue
+			}
+
+			value := &RowsEventValue{
+				ColumnId: i,
+				Type:     column.Type,
+			}
+
+			if event.IsTrue(i, nullBitmap1) {
+				value.Value = nil
+				value.IsNull = true
+			} else {
+				switch column.Type {
+				case _MYSQL_TYPE_ENUM,
+					_MYSQL_TYPE_SET, _MYSQL_TYPE_LONG_BLOB, _MYSQL_TYPE_MEDIUM_BLOB, _MYSQL_TYPE_BLOB,
+					_MYSQL_TYPE_TINY_BLOB, _MYSQL_TYPE_GEOMETRY, _MYSQL_TYPE_BIT:
+					value.Value, _ = pack.readStringLength()
+				case _MYSQL_TYPE_STRING, _MYSQL_TYPE_VARCHAR, _MYSQL_TYPE_VAR_STRING:
+					val, _ := pack.readStringLength()
+					value.Value = string(val)
+				case _MYSQL_TYPE_DECIMAL, _MYSQL_TYPE_NEWDECIMAL:
+					val, _ := pack.readStringLength()
+					value.Value, _ = strconv.ParseFloat(string(val), 64)
+				case _MYSQL_TYPE_LONGLONG:
+					var val uint64
+					pack.readUint64(&val)
+					value.Value = val
+				case _MYSQL_TYPE_LONG:
+					var val uint32
+					pack.readUint32(&val)
+					value.Value = val
+				case _MYSQL_TYPE_INT24:
+					var val uint32
+					pack.readThreeByteUint32(&val)
+					value.Value = val
+				case _MYSQL_TYPE_SHORT, _MYSQL_TYPE_YEAR:
+					var val uint16
+					pack.readUint16(&val)
+					value.Value = val
+				case _MYSQL_TYPE_TINY:
+					value.Value, _ = pack.ReadByte()
+				case _MYSQL_TYPE_FLOAT:
+					var val uint32
+					pack.readUint32(&val)
+					value.Value = float32(math.Float32frombits(val))
+				case _MYSQL_TYPE_DOUBLE:
+					var val uint64
+					pack.readUint64(&val)
+					value.Value = math.Float64frombits(val)
+				case _MYSQL_TYPE_DATE, _MYSQL_TYPE_DATETIME, _MYSQL_TYPE_TIMESTAMP:
+					value.Value = pack.readDateTime()
+				case _MYSQL_TYPE_TIME:
+					value.Value = pack.readTime()
+				}
+			}
+			row = append(row, value)
+		}
+
+		event.Values = append(event.Values, row)
+
+		if pack.Len() == 0 {
+			break
+		}
+	}
 }
 
 func (event *TableMapEvent) read(pack *pack) {
@@ -218,29 +313,27 @@ func (event *TableMapEvent) read(pack *pack) {
 
 	pack.readIntLengthOrNil(&columnCount, &isNull)
 
-	event.columnTypeDef = pack.Next(int(columnCount))
-	event.columnMetaDef, _ = pack.readStringLength()
-	event.columnNullBitMap = pack.Bytes()
-	//	fmt.Printf("% x\n", event.columnNullBitMap)
-
+	columnTypeDef := pack.Next(int(columnCount))
+	columnMetaDef, _ := pack.readStringLength()
+	columnNullBitMap := pack.Bytes()
 	event.Columns = make([]*TableMapEventColumn, columnCount)
 
 	metaOffset := 0
 
-	for i := 0; i < len(event.columnTypeDef); i++ {
+	for i := 0; i < len(columnTypeDef); i++ {
 		column := &TableMapEventColumn{
-			Type: event.columnTypeDef[i],
-			Null: (event.columnNullBitMap[i/8] >> uint8(i%8)) & 1 == 1,
+			Type:     columnTypeDef[i],
+			Nullable: (columnNullBitMap[i/8]>>uint8(i%8))&1 == 1,
 		}
 
-		switch event.columnTypeDef[i]{
+		switch columnTypeDef[i] {
 		case _MYSQL_TYPE_STRING, _MYSQL_TYPE_VAR_STRING, _MYSQL_TYPE_VARCHAR, _MYSQL_TYPE_DECIMAL,
-		_MYSQL_TYPE_NEWDECIMAL, _MYSQL_TYPE_ENUM, _MYSQL_TYPE_SET:
-			column.MetaInfo = event.columnMetaDef[metaOffset:metaOffset+2]
-			metaOffset+=2
+			_MYSQL_TYPE_NEWDECIMAL, _MYSQL_TYPE_ENUM, _MYSQL_TYPE_SET:
+			column.MetaInfo = columnMetaDef[metaOffset : metaOffset+2]
+			metaOffset += 2
 		case _MYSQL_TYPE_BLOB, _MYSQL_TYPE_DOUBLE, _MYSQL_TYPE_FLOAT:
-			column.MetaInfo = event.columnMetaDef[metaOffset:metaOffset+1]
-			metaOffset+=1
+			column.MetaInfo = columnMetaDef[metaOffset : metaOffset+1]
+			metaOffset += 1
 		default:
 			column.MetaInfo = []byte{}
 		}
@@ -506,7 +599,7 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 			eventLogHeader: header,
 		}
 	case _APPEND_BLOCK_EVENT:
-		event = &AppendBlockEvent{
+		event = &BeginLoadQueryEvent{
 			eventLogHeader: header,
 		}
 	case _EXECUTE_LOAD_QUERY_EVENT:
@@ -557,5 +650,10 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 
 	ev.lastRotatePosition = header.NextPosition
 	event.read(pack)
+
+	if header.EventType == _APPEND_BLOCK_EVENT {
+		return event.(*AppendBlockEvent), nil
+	}
+
 	return event, nil
 }

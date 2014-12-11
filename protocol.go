@@ -17,6 +17,13 @@ func newProtoReader(b *bufio.Reader) *protoReader {
 	}
 }
 
+func readUintRevert(buff []byte, dest *uint16) error {
+	*dest = uint16(buff[1] & 0xFF)
+	*dest += uint16(buff[0]&0xFF) << 8
+
+	return nil
+}
+
 func readUint16(buff []byte, dest *uint16) error {
 	if len(buff) != 2 {
 		return errors.New("incorrect source byte array length")

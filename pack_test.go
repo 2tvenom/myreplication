@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestReadPackTotal(t *testing.T) {
@@ -723,5 +724,183 @@ func TestEOFPacket(t *testing.T) {
 
 	if !pack.isEOF() {
 		t.Error("packet is not EOF")
+	}
+}
+
+func TestReadDateTime(t *testing.T) {
+
+	type dateTimeTestCase struct {
+		buff         []byte
+		expectedTime time.Time
+	}
+
+	testCases := []*dateTimeTestCase{
+		&dateTimeTestCase{
+			buff: []byte{
+				0x10, 0x00, 0x00, 0x01, 0x0b, 0xda, 0x07, 0x0a, 0x11, 0x13, 0x1b, 0x1e, 0x01, 0x00, 0x00, 0x00, 0x00,
+				0x00, 0x02, 0x00,
+			},
+			expectedTime: time.Date(2010, 10, 17, 19, 27, 30, 1, time.Local),
+		},
+		&dateTimeTestCase{
+			buff: []byte{
+				0x09, 0x00, 0x00, 0x01, 0x04, 0xda, 0x07, 0x0a, 0x11, 0x00, 0x00, 0x02, 0x00,
+			},
+			expectedTime: time.Date(2010, 10, 17, 0, 0, 0, 0, time.Local),
+		},
+		&dateTimeTestCase{
+			buff: []byte{
+				0x05, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00,
+			},
+			expectedTime: time.Date(1, 1, 1, 2, 30, 0, 0, time.Local),
+		},
+		&dateTimeTestCase{
+			buff: []byte{
+				0x0C, 0x00, 0x00, 0x01,
+				0x07, 0xda, 0x07, 0x0a, 0x11, 0x13, 0x1b, 0x1e,
+				0x00, 0x00, 0x02, 0x00,
+			},
+			expectedTime: time.Date(2010, 10, 17, 19, 27, 30, 0, time.Local),
+		},
+	}
+
+	for i, testCase := range testCases {
+		reader := newPackReader(bytes.NewBuffer(testCase.buff))
+		pack, _ := reader.readNextPack()
+
+		result := pack.readDateTime()
+
+		if !testCase.expectedTime.Equal(result) {
+			t.Fatal(
+				"incorrect date time at test", i,
+				"expected", testCase.expectedTime,
+				"got", result,
+			)
+		}
+	}
+}
+
+func TestReadTime(t *testing.T) {
+
+	type timeTestCase struct {
+		buff         []byte
+		expectedTime time.Duration
+	}
+
+	testCases := []*timeTestCase{
+		&timeTestCase{
+			buff: []byte{
+				0x11, 0x00, 0x00, 0x01,
+				0x0c, 0x01, 0x78, 0x00, 0x00, 0x00, 0x13, 0x1b, 0x1e, 0x01, 0x00, 0x00, 0x00,
+				0x00, 0x00, 0x02, 0x00,
+			},
+			expectedTime: -time.Duration(
+				120*24*time.Hour + 19*time.Hour + 27*time.Minute + 30*time.Second + time.Microsecond,
+			),
+		},
+		&timeTestCase{
+			buff: []byte{
+				0x11, 0x00, 0x00, 0x01,
+				0x0c, 0x00, 0x78, 0x00, 0x00, 0x00, 0x13, 0x1b, 0x1e, 0x01, 0x00, 0x00, 0x00,
+				0x00, 0x00, 0x02, 0x00,
+			},
+			expectedTime: time.Duration(
+				120*24*time.Hour + 19*time.Hour + 27*time.Minute + 30*time.Second + time.Microsecond,
+			),
+		},
+		&timeTestCase{
+			buff: []byte{
+				0x0D, 0x00, 0x00, 0x01,
+				0x08, 0x00, 0x78, 0x00, 0x00, 0x00, 0x13, 0x1b, 0x1e,
+				0x00, 0x00, 0x02, 0x00,
+			},
+			expectedTime: time.Duration(
+				120*24*time.Hour + 19*time.Hour + 27*time.Minute + 30*time.Second,
+			),
+		},
+	}
+
+	for i, testCase := range testCases {
+		reader := newPackReader(bytes.NewBuffer(testCase.buff))
+		pack, _ := reader.readNextPack()
+
+		result := pack.readTime()
+
+		if result != testCase.expectedTime {
+			t.Fatal(
+				"incorrect time at test", i,
+				"expected", testCase.expectedTime,
+				"got", result,
+			)
+		}
+	}
+}
+
+func TestNewDecimal(t *testing.T) {
+
+	type decimalTestCase struct {
+		buff              []byte
+		expectedDecimal   float64
+		precission, scale int
+	}
+
+	testCases := []*decimalTestCase{
+		&decimalTestCase{
+			buff: []byte{
+				0x07, 0x00, 0x00, 0x01,
+				0x9e, 0x61, 0x42,
+				0x00, 0x00, 0x02, 0x00,
+			},
+			precission:      6,
+			scale:           2,
+			expectedDecimal: 7777.66,
+		},
+	}
+
+	for i, testCase := range testCases {
+		reader := newPackReader(bytes.NewBuffer(testCase.buff))
+		pack, _ := reader.readNextPack()
+
+		result, _ := pack.readNewDecimal(testCase.precission, testCase.scale).Float64()
+
+		if result != testCase.expectedDecimal {
+			t.Fatal(
+				"incorrect decimal at test", i,
+				"expected", testCase.expectedDecimal,
+				"got", result,
+			)
+		}
+	}
+}
+
+func TestDecimalBinarySize(t *testing.T) {
+
+	type decimalSizeTestCase struct {
+		expectedSize, precission, scale int
+	}
+
+	testCases := []*decimalSizeTestCase{
+		&decimalSizeTestCase{
+			precission:   6,
+			scale:        2,
+			expectedSize: 3,
+		},
+		&decimalSizeTestCase{
+			precission:   10,
+			scale:        0,
+			expectedSize: 5,
+		},
+	}
+
+	for i, testCase := range testCases {
+		size := getDecimalBinarySize(testCase.precission, testCase.scale)
+
+		if size != testCase.expectedSize {
+			t.Fatal(
+				"incorrect decimal binary size at test", i,
+				"expected", testCase.expectedSize,
+				"got", size,
+			)
+		}
 	}
 }

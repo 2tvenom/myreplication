@@ -35,5 +35,5 @@ func TestConnectionAndAuth(t *testing.T) {
 	}
 
 	println("--", el.binlogVersion, "--")
-	//		el.start()
+	//	el.start()
 }

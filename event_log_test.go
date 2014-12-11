@@ -2,9 +2,17 @@ package mysql_replication_listener
 
 import (
 	"bytes"
+	"reflect"
 	"strings"
 	"testing"
-	"reflect"
+)
+
+type (
+	rowEventTestCase struct {
+		tableMapEventBuff []byte
+		rowsEventBuff     []byte
+		expectedValues    [][]*RowsEventValue
+	}
 )
 
 func TestBinlogRotateEvent(t *testing.T) {
@@ -641,7 +649,22 @@ func TestRandEvent(t *testing.T) {
 	}
 }
 
+func getTableMapEvent(mockHandshake []byte) *TableMapEvent {
+	packReader := newPackReader(bytes.NewBuffer(mockHandshake))
+	pack, _ := packReader.readNextPack()
+
+	header := &eventLogHeader{}
+	header.read(pack)
+
+	table := &TableMapEvent{}
+	table.eventLogHeader = header
+	table.read(pack)
+
+	return table
+}
+
 func TestTableMapEvent(t *testing.T) {
+
 	mockHandshake := []byte{
 		//pack header
 		0x49, 0x00, 0x00,
@@ -683,15 +706,7 @@ func TestTableMapEvent(t *testing.T) {
 		0x6e, 0xfb, 0x07,
 	}
 
-	packReader := newPackReader(bytes.NewBuffer(mockHandshake))
-	pack, _ := packReader.readNextPack()
-
-	header := &eventLogHeader{}
-	header.read(pack)
-
-	table := &TableMapEvent{}
-	table.eventLogHeader = header
-	table.read(pack)
+	table := getTableMapEvent(mockHandshake)
 
 	if table.EventType != _TABLE_MAP_EVENT {
 		t.Fatal(
@@ -730,32 +745,32 @@ func TestTableMapEvent(t *testing.T) {
 
 	type (
 		TableMapEventTest struct {
-			expectedType   byte
-			expectedIsNull bool
-			expectedMetaInfo       []byte
+			expectedType     byte
+			expectedIsNull   bool
+			expectedMetaInfo []byte
 		}
 	)
 
 	testsCases := []*TableMapEventTest{
-		&TableMapEventTest{_MYSQL_TYPE_LONG, false, []byte{}},             // `id` int(11) NOT NULL AUTO_INCREMENT,
-		&TableMapEventTest{_MYSQL_TYPE_TINY, true, []byte{}},              // `i1` tinyint(4) DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_TINY, true, []byte{}},              // `i2` tinyint(3) unsigned DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_SHORT, true, []byte{}},             // `i3` smallint(6) DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_SHORT, false, []byte{}},            // `i4` smallint(5) unsigned NOT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_INT24, true, []byte{}},            // `i5` mediumint(9) DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_INT24, true, []byte{}},            // `i6` mediumint(8) unsigned DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_LONG, false, []byte{}},             // `i7` int(11) NOT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_LONG, true, []byte{}},              // `i8` int(10) unsigned DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_LONG, true, []byte{}},              // `i9` int(11) DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_LONG, false, []byte{}},             // `1i0` int(10) unsigned NOT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_LONGLONG, true, []byte{}},          // `1i1` bigint(20) DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_LONGLONG, true, []byte{}},          // `1i2` bigint(20) unsigned DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONG, false, []byte{}},                // `id` int(11) NOT NULL AUTO_INCREMENT,
+		&TableMapEventTest{_MYSQL_TYPE_TINY, true, []byte{}},                 // `i1` tinyint(4) DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_TINY, true, []byte{}},                 // `i2` tinyint(3) unsigned DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_SHORT, true, []byte{}},                // `i3` smallint(6) DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_SHORT, false, []byte{}},               // `i4` smallint(5) unsigned NOT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_INT24, true, []byte{}},                // `i5` mediumint(9) DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_INT24, true, []byte{}},                // `i6` mediumint(8) unsigned DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONG, false, []byte{}},                // `i7` int(11) NOT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONG, true, []byte{}},                 // `i8` int(10) unsigned DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONG, true, []byte{}},                 // `i9` int(11) DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONG, false, []byte{}},                // `1i0` int(10) unsigned NOT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONGLONG, true, []byte{}},             // `1i1` bigint(20) DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_LONGLONG, true, []byte{}},             // `1i2` bigint(20) unsigned DEFAULT NULL,
 		&TableMapEventTest{_MYSQL_TYPE_NEWDECIMAL, true, []byte{0x0a, 0x00}}, // `1i3` decimal(10,0) DEFAULT NULL,
 		&TableMapEventTest{_MYSQL_TYPE_NEWDECIMAL, true, []byte{0x0a, 0x00}}, // `1i4` decimal(10,0) unsigned DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_DOUBLE, true, []byte{0x08}},        // `1i5` double DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_DOUBLE, true, []byte{0x08}},        // `1i6` double unsigned DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_FLOAT, true, []byte{0x04}},         // `1i7` float DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_FLOAT, true, []byte{0x04}},         // `1i8` float unsigned DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_DOUBLE, true, []byte{0x08}},           // `1i5` double DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_DOUBLE, true, []byte{0x08}},           // `1i6` double unsigned DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_FLOAT, true, []byte{0x04}},            // `1i7` float DEFAULT NULL,
+		&TableMapEventTest{_MYSQL_TYPE_FLOAT, true, []byte{0x04}},            // `1i8` float unsigned DEFAULT NULL,
 	}
 
 	for i, testCase := range testsCases {
@@ -769,11 +784,11 @@ func TestTableMapEvent(t *testing.T) {
 			)
 		}
 
-		if testColumn.Null != testCase.expectedIsNull {
+		if testColumn.Nullable != testCase.expectedIsNull {
 			t.Fatal(
 				"Incorrect null flag with index", i,
 				"expected", testCase.expectedIsNull,
-				"got", testColumn.Null,
+				"got", testColumn.Nullable,
 			)
 		}
 
@@ -787,76 +802,423 @@ func TestTableMapEvent(t *testing.T) {
 	}
 }
 
-func TestUpdateRowsEventV1(t *testing.T) {
-	mockHandshake := []byte{
-		//pack header
-		0xCD, 0x00, 0x00,
-		0x01,
-		//event header
-		0x00,
-		0x3a, 0x02, 0x87, 0x54,
-		0x18,
-		0x01, 0x00, 0x00, 0x00,
-		0xcc, 0x00, 0x00, 0x00,
-		0x64, 0x09, 0x00, 0x00,
-		0x00, 0x00,
-		//body
-		//table id
-		0x2d, 0x00, 0x00, 0x00, 0x00, 0x00,
-		//flags
-		0x01, 0x00,
-		//columns count = 19
-		0x13,
-		//bitmap 1
-		0xff, 0xff, 0xff,
-		//bitmap 2
-		0xff, 0xff, 0xff,
-		//bull bitmap
-		0x00, 0x00, 0xf8,
+func TestWriteRowsEventV1(t *testing.T) {
+	return
+	testCases := []*rowEventTestCase{
+		&rowEventTestCase{
+			tableMapEventBuff: []byte{
+				0x34, 0x00, 0x00, 0x01, 0x00, 0xaa, 0x74, 0x89, 0x54, 0x13, 0x01, 0x00, 0x00, 0x00, 0x33, 0x00, 0x00,
+				0x00, 0xb1, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x04, 0x74,
+				0x65, 0x73, 0x74, 0x00, 0x07, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x30, 0x31, 0x00, 0x03, 0x03, 0x0f, 0x05,
+				0x03, 0x2d, 0x00, 0x08, 0x04,
+			},
+			rowsEventBuff: []byte{
+				0x2E, 0x00, 0x00,
+				0x01,
+				0x00,
+				0xaa, 0x74, 0x89, 0x54,
+				0x17,
+				0x01, 0x00, 0x00, 0x00,
+				0x2d, 0x00, 0x00, 0x00,
+				0xde, 0x0d, 0x00, 0x00,
+				0x00, 0x00,
+				0x2b, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x01, 0x00,
+				0x03,
+				0xff,
+				0xf8,
+				0x0c, 0x00, 0x00, 0x00, 0x02, 0x68, 0x69, 0x1f, 0x85, 0xeb, 0x51, 0xb8, 0x1e, 0x09, 0x40,
+			},
+			expectedValues: [][]*RowsEventValue{
+				[]*RowsEventValue{
+					&RowsEventValue{0, false, uint32(12), _MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hi", _MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, false, 3.14, _MYSQL_TYPE_DOUBLE},
+				},
+			},
+		},
 
-		0x01, 0x00, 0x00, 0x00,
-		0x01,
-		0x01,
-		0x01, 0x00,
-		0x01, 0x00,
-		0x01, 0x00, 0x00,
-		0x01, 0x00, 0x00,
-		0x01, 0x00, 0x00, 0x00,
-		0x01, 0x00, 0x00, 0x00,
-		0x01, 0x00, 0x00, 0x00,
-		0x01, 0x00, 0x00, 0x00,
-		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		&rowEventTestCase{
+			tableMapEventBuff: []byte{
+				0x34, 0x00, 0x00, 0x01, 0x00, 0x83, 0xa8, 0x89, 0x54, 0x13, 0x01, 0x00, 0x00, 0x00, 0x33, 0x00, 0x00,
+				0x00, 0x70, 0x0e, 0x00, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x04, 0x74,
+				0x65, 0x73, 0x74, 0x00, 0x07, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x30, 0x31, 0x00, 0x03, 0x03, 0x0f, 0x05,
+				0x03, 0x2d, 0x00, 0x08, 0x04,
+			},
+			rowsEventBuff: []byte{
+				0x26, 0x00, 0x00,
+				0x01,
+				0x00, 0x83, 0xa8, 0x89, 0x54, 0x17, 0x01, 0x00, 0x00, 0x00, 0x25, 0x00, 0x00, 0x00, 0x95, 0x0e, 0x00,
+				0x00, 0x00, 0x00, 0x2b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x03, 0xff, 0xfc, 0x0d, 0x00, 0x00,
+				0x00, 0x02, 0x68, 0x69,
+			},
+			expectedValues: [][]*RowsEventValue{
+				[]*RowsEventValue{
+					&RowsEventValue{0, false, uint32(13), _MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hi", _MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, true, nil, _MYSQL_TYPE_DOUBLE},
+				},
+			},
+		},
+		&rowEventTestCase{
+			tableMapEventBuff: []byte{
+				0x34, 0x00, 0x00, 0x01, 0x00, 0x83, 0xa8, 0x89, 0x54, 0x13, 0x01, 0x00, 0x00, 0x00, 0x33, 0x00, 0x00,
+				0x00, 0x70, 0x0e, 0x00, 0x00, 0x00, 0x00, 0x2b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x04, 0x74,
+				0x65, 0x73, 0x74, 0x00, 0x07, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x30, 0x31, 0x00, 0x03, 0x03, 0x0f, 0x05,
+				0x03, 0x2d, 0x00, 0x08, 0x04,
+			},
+			rowsEventBuff: []byte{
+				0x39, 0x00, 0x00,
+				0x01,
+				0x00,
+				0x73, 0xa9, 0x89, 0x54,
+				0x17,
+				0x01, 0x00, 0x00, 0x00,
+				0x38, 0x00, 0x00, 0x00,
+				0x5f, 0x0f, 0x00, 0x00,
+				0x00, 0x00,
+				0x2b, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x01, 0x00,
+				0x03,
+				0xff,
+				//row 1
+				0xfc,
+				0x0e, 0x00, 0x00, 0x00, //14
+				0x02, 0x68, 0x69, //hi
+				//row 2
+				0xf8,
+				0x0f, 0x00, 0x00, 0x00, //15
+				0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f, //hello
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x40, //22
+			},
+			expectedValues: [][]*RowsEventValue{
+				[]*RowsEventValue{
+					&RowsEventValue{0, false, uint32(14), _MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hi", _MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, true, nil, _MYSQL_TYPE_DOUBLE},
+				},
+				[]*RowsEventValue{
+					&RowsEventValue{0, false, uint32(15), _MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hello", _MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, false, 22.0, _MYSQL_TYPE_DOUBLE},
+				},
+			},
+		},
 
-		0x80, 0x00, 0x00, 0x00, 0x01,
-		0x80, 0x00, 0x00, 0x00, 0x01,
+		&rowEventTestCase{
+			tableMapEventBuff: []byte{
+				0x49, 0x00, 0x00,
+				0x01,
+				0x00,
+				0xf3, 0xc1, 0x89, 0x54,
+				0x13,
+				0x01, 0x00, 0x00, 0x00,
+				0x48, 0x00, 0x00, 0x00,
+				0x06, 0x10, 0x00, 0x00,
+				0x00, 0x00,
+				0x2d, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x01, 0x00,
+				0x04,
+				0x74, 0x65, 0x73, 0x74,
+				0x00,
+				0x05,
+				0x74, 0x79, 0x70, 0x65, 0x73,
+				0x00,
+				0x13,
+				0x03, 0x01, 0x01, 0x02, 0x02, 0x09, 0x09, 0x03, 0x03, 0x03, 0x03, 0x08, 0x08, 0xf6, 0xf6, 0x05, 0x05,
+				0x04, 0x04,
+				0x08,
+				0x0a, 0x00,
+				0x0a, 0x00,
+				0x08,
+				0x08,
+				0x04,
+				0x04,
+				0x6e, 0xfb, 0x07,
+			},
+			rowsEventBuff: []byte{
+				0xB0, 0x00, 0x00,
+				0x01,
+				0x00,
+				0xf3, 0xc1, 0x89, 0x54,
+				0x17,
+				0x01, 0x00, 0x00, 0x00,
+				0xaf, 0x00, 0x00, 0x00,
+				0xb5, 0x10, 0x00, 0x00,
+				0x00, 0x00,
+				0x2d, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x01, 0x00,
+				//count columns
+				0x13,
+				//binary present
+				0xff, 0xff, 0xff,
+				//null bitmap
+				0x02, 0x88, 0xf8,
+				//values
+				//row 1
+				0x02, 0x00, 0x00, 0x00,
+				0x01,
+				0x02, 0x00,
+				0x03, 0x00,
+				0x04, 0x00, 0x00,
+				0x05, 0x00, 0x00,
+				0x06, 0x00, 0x00, 0x00,
+				0x07, 0x00, 0x00, 0x00,
+				0x08, 0x00, 0x00, 0x00,
+				0x09, 0x00, 0x00, 0x00,
+				0x0b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x80, 0x00, 0x00, 0x00, 0x0c, //??
+				0x80, 0x00, 0x00, 0x00, 0x0d, //??
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2e, 0x40,
+				0x00, 0x00, 0x80, 0x41, 0x00, 0x00, 0x88, 0x41,
+				//null bitmap
+				0x02, 0x80, 0xf8,
+				//row 2
+				0x03, 0x00, 0x00, 0x00,
+				0x12,
+				0x13, 0x00,
+				0x14, 0x00,
+				0x15, 0x00, 0x00,
+				0x16, 0x00, 0x00,
+				0x17, 0x00, 0x00, 0x00,
+				0x18, 0x00, 0x00, 0x00,
+				0x19, 0x00, 0x00, 0x00,
+				0x1a, 0x00, 0x00, 0x00,
+				0x1b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x1c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x80, 0x00, 0x00, 0x00, 0x1d, //??
+				0x80, 0x00, 0x00, 0x00, 0x1e, //??
+				0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x3f, 0x40,
+				0x00, 0x00, 0x00, 0x42, 0x00, 0x00, 0x04, 0x42,
+			},
+			/*
+				`id` int(11) NOT NULL AUTO_INCREMENT,
+				`i1` tinyint(4) DEFAULT NULL,
+				`i2` tinyint(3) unsigned DEFAULT NULL,
+				`i3` smallint(6) DEFAULT NULL,
+				`i4` smallint(5) unsigned NOT NULL,
+				`i5` mediumint(9) DEFAULT NULL,
+				`i6` mediumint(8) unsigned DEFAULT NULL,
+				`i7` int(11) NOT NULL,
+				`i8` int(10) unsigned DEFAULT NULL,
+				`i9` int(11) DEFAULT NULL,
+				`1i0` int(10) unsigned NOT NULL,
+				`1i1` bigint(20) DEFAULT NULL,
+				`1i2` bigint(20) unsigned DEFAULT NULL,
+				`1i3` decimal(10,0) DEFAULT NULL,
+				`1i4` decimal(10,0) unsigned DEFAULT NULL,
+				`1i5` double DEFAULT NULL,
+				`1i6` double unsigned DEFAULT NULL,
+				`1i7` float DEFAULT NULL,
+				`1i8` float unsigned DEFAULT NULL,
 
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				i2 = 1 = 18
+				i3 = 2 = 19
+				i4 = 3 = 20
+				i5 = 4 = 21
+				i6 = 5 = 22
+				i7 = 6 = 23
+				i8 = 7 = 24
+				i9 = 8 = 25
+				1i0 = 9 = 26
+				1i1 = null = 27
+				1i2 = 11 = 28
+				1i3 = 12 = 29
+				1i4 = 13 = 30
+				1i6 = 15 = 31
+				1i7 = 16 = 32
+				1i8 = 17 = 33
+			*/
 
-		0xf0, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-		0xf0, 0x3f, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00,
-
-		0x80, 0x3f, 0x00, 0x00, 0xf8, 0x01, 0x00, 0x00, 0x00, 0x02, 0x02, 0x02, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x02, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x02, 0x80, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40,
+			expectedValues: [][]*RowsEventValue{
+				[]*RowsEventValue{
+					&RowsEventValue{0, false, uint32(1), _MYSQL_TYPE_LONG},
+					&RowsEventValue{1, true, nil, _MYSQL_TYPE_TINY},
+					&RowsEventValue{2, false, byte(1), _MYSQL_TYPE_TINY},
+					&RowsEventValue{3, false, int16(2), _MYSQL_TYPE_SHORT},
+					&RowsEventValue{4, false, uint16(3), _MYSQL_TYPE_SHORT},
+					&RowsEventValue{5, false, int32(4), _MYSQL_TYPE_INT24},
+					&RowsEventValue{6, false, uint32(5), _MYSQL_TYPE_INT24},
+					&RowsEventValue{7, false, int32(6), _MYSQL_TYPE_LONG},
+					&RowsEventValue{8, false, uint32(7), _MYSQL_TYPE_LONG},
+					&RowsEventValue{9, false, int32(8), _MYSQL_TYPE_LONG},
+					&RowsEventValue{10, false, uint32(9), _MYSQL_TYPE_LONG},
+					&RowsEventValue{11, true, nil, _MYSQL_TYPE_LONGLONG},
+					&RowsEventValue{12, false, uint64(11), _MYSQL_TYPE_LONGLONG},
+					&RowsEventValue{13, false, 12.0, _MYSQL_TYPE_DECIMAL},
+					&RowsEventValue{14, false, 13.0, _MYSQL_TYPE_DECIMAL},
+					&RowsEventValue{15, true, nil, _MYSQL_TYPE_DOUBLE},
+					&RowsEventValue{16, false, 15.0, _MYSQL_TYPE_DOUBLE},
+					&RowsEventValue{17, false, float32(16), _MYSQL_TYPE_FLOAT},
+					&RowsEventValue{18, false, float32(17), _MYSQL_TYPE_FLOAT},
+				},
+				[]*RowsEventValue{
+					&RowsEventValue{0, false, uint32(2), _MYSQL_TYPE_LONG},
+					&RowsEventValue{1, true, nil, _MYSQL_TYPE_TINY},
+					&RowsEventValue{2, false, byte(18), _MYSQL_TYPE_TINY},
+					&RowsEventValue{3, false, int16(19), _MYSQL_TYPE_SHORT},
+					&RowsEventValue{4, false, uint16(20), _MYSQL_TYPE_SHORT},
+					&RowsEventValue{5, false, int32(21), _MYSQL_TYPE_INT24},
+					&RowsEventValue{6, false, uint32(22), _MYSQL_TYPE_INT24},
+					&RowsEventValue{7, false, int32(23), _MYSQL_TYPE_LONG},
+					&RowsEventValue{8, false, uint32(24), _MYSQL_TYPE_LONG},
+					&RowsEventValue{9, false, int32(25), _MYSQL_TYPE_LONG},
+					&RowsEventValue{10, false, uint32(26), _MYSQL_TYPE_LONG},
+					&RowsEventValue{11, false, int64(27), _MYSQL_TYPE_LONGLONG},
+					&RowsEventValue{12, false, uint64(28), _MYSQL_TYPE_LONGLONG},
+					&RowsEventValue{13, false, 29.0, _MYSQL_TYPE_DECIMAL},
+					&RowsEventValue{14, false, 30.0, _MYSQL_TYPE_DECIMAL},
+					&RowsEventValue{15, true, nil, _MYSQL_TYPE_DOUBLE},
+					&RowsEventValue{16, false, 31.0, _MYSQL_TYPE_DOUBLE},
+					&RowsEventValue{17, false, float32(32), _MYSQL_TYPE_FLOAT},
+					&RowsEventValue{18, false, float32(33), _MYSQL_TYPE_FLOAT},
+				},
+			},
+		},
 	}
 
-	packReader := newPackReader(bytes.NewBuffer(mockHandshake))
-	pack, _ := packReader.readNextPack()
+	for i, testCase := range testCases {
+		packReader := newPackReader(bytes.NewBuffer(testCase.rowsEventBuff))
+		pack, _ := packReader.readNextPack()
 
-	header := &eventLogHeader{}
-	header.read(pack)
+		header := &eventLogHeader{}
+		header.read(pack)
 
-	update := &UpdateRowsEvent{}
-	update.setVersion(byte(1))
-	update.setPostHeaderLength(byte(8))
-	update.eventLogHeader = header
-	update.read(pack)
+		write := &rowsEvent{}
+		write.eventLogHeader = header
+		write.version = byte(1)
+		write.postHeaderLength = byte(8)
+		write.tableMapEvent = getTableMapEvent(testCase.tableMapEventBuff)
+		write.read(pack)
 
-	if update.EventType != _UPDATE_ROWS_EVENTv1 {
-		t.Fatal(
-			"Incorrect event type",
-			"expected", _UPDATE_ROWS_EVENTv1,
-			"got", update.EventType,
-		)
+		if write.EventType != _WRITE_ROWS_EVENTv1 {
+			t.Fatal(
+				"Incorrect event type",
+				"expected", _WRITE_ROWS_EVENTv1,
+				"got", write.EventType,
+			)
+		}
+
+		if len(write.Values) != len(testCase.expectedValues) {
+			t.Fatal(
+				"Incorrect values quantity at test", i,
+				"expected", len(testCase.expectedValues),
+				"got", len(write.Values),
+			)
+		}
+
+		for k, expectedValueRow := range testCase.expectedValues {
+
+			for j, expectedValue := range expectedValueRow {
+				resultValue := write.Values[k][j]
+
+				if expectedValue.Type != resultValue.Type {
+					t.Fatal(
+						"Incorrect type at test", i, "row", k, "value id", j,
+						"expected", expectedValue.Type,
+						"got", resultValue.Type,
+					)
+				}
+
+				if expectedValue.ColumnId != resultValue.ColumnId {
+					t.Fatal(
+						"Incorrect column id at test", i, "row", k, "value id", j,
+						"expected", expectedValue.ColumnId,
+						"got", resultValue.ColumnId,
+					)
+				}
+
+				if expectedValue.IsNull != resultValue.IsNull {
+					t.Fatal(
+						"Incorrect null value at test", i, "row", k, "value id", j,
+						"expected", expectedValue.IsNull,
+						"got", resultValue.IsNull,
+					)
+				}
+
+				if !reflect.DeepEqual(expectedValue.Value, resultValue.Value) {
+					t.Fatal(
+						"Incorrect value at test", i, "row", k, "value id", j,
+						"expected", expectedValue.Value,
+						"got", resultValue.Value,
+					)
+				}
+			}
+		}
 	}
-
 }
+
+//func TestUpdateRowsEventV1(t *testing.T) {
+//	mockHandshake := []byte{
+//		//pack header
+//		0xCD, 0x00, 0x00,
+//		0x01,
+//		//event header
+//		0x00,
+//		0x3a, 0x02, 0x87, 0x54,
+//		0x18,
+//		0x01, 0x00, 0x00, 0x00,
+//		0xcc, 0x00, 0x00, 0x00,
+//		0x64, 0x09, 0x00, 0x00,
+//		0x00, 0x00,
+//		//body
+//		//table id
+//		0x2d, 0x00, 0x00, 0x00, 0x00, 0x00,
+//		//flags
+//		0x01, 0x00,
+//		//columns count = 19
+//		0x13,
+//		//bitmap 1
+//		0xff, 0xff, 0xff,
+//		//bitmap 2
+//		0xff, 0xff, 0xff,
+//		//null bitmap
+//		0x00, 0x00, 0xf8,
+//
+//		0x01, 0x00, 0x00, 0x00,
+//		0x01,
+//		0x01,
+//		0x01, 0x00,
+//		0x01, 0x00,
+//		0x01, 0x00, 0x00,
+//		0x01, 0x00, 0x00,
+//		0x01, 0x00, 0x00, 0x00,
+//		0x01, 0x00, 0x00, 0x00,
+//		0x01, 0x00, 0x00, 0x00,
+//		0x01, 0x00, 0x00, 0x00,
+//		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//
+//		0x80, 0x00, 0x00, 0x00, 0x01,
+//		0x80, 0x00, 0x00, 0x00, 0x01,
+//
+//		0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//
+//		0xf0, 0x3f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//		0xf0, 0x3f, 0x00, 0x00, 0x80, 0x3f, 0x00, 0x00,
+//
+//		0x80, 0x3f, 0x00, 0x00, 0xf8, 0x01, 0x00, 0x00, 0x00, 0x02, 0x02, 0x02, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x02, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x02, 0x80, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x40,
+//	}
+//
+//	packReader := newPackReader(bytes.NewBuffer(mockHandshake))
+//	pack, _ := packReader.readNextPack()
+//
+//	header := &eventLogHeader{}
+//	header.read(pack)
+//
+//	update := &rowsEvent{}
+//	update.eventLogHeader = header
+//	update.version = byte(1)
+//	update.postHeaderLength = byte(8)
+//	update.tableMapEvent = getTableMapEvent()
+//
+//	update.read(pack)
+//
+//	if update.EventType != _UPDATE_ROWS_EVENTv1 {
+//		t.Fatal(
+//			"Incorrect event type",
+//			"expected", _UPDATE_ROWS_EVENTv1,
+//			"got", update.EventType,
+//		)
+//	}
+//}

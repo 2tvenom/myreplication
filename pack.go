@@ -3,6 +3,9 @@ package mysql_replication_listener
 import (
 	"bytes"
 	"io"
+	"math/big"
+	"strconv"
+	"time"
 )
 
 type (
@@ -22,6 +25,10 @@ type (
 	}
 )
 
+var (
+	compressedBytes = []int{0, 1, 1, 2, 2, 3, 3, 4, 4, 4}
+)
+
 func newPackReader(conn io.Reader) *packReader {
 	return &packReader{
 		conn: conn,
@@ -39,12 +46,16 @@ func (w *packWriter) flush(p *pack) error {
 	return err
 }
 
-func newPack() *pack {
+func newPackWithBuff(buff []byte) *pack {
 	pack := &pack{
-		buff: make([]byte, 4),
+		buff: buff,
 	}
 	pack.Buffer = bytes.NewBuffer(pack.buff)
 	return pack
+}
+
+func newPack() *pack {
+	return newPackWithBuff(make([]byte, 4))
 }
 
 func (r *packReader) readNextPack() (*pack, error) {
@@ -112,6 +123,150 @@ func (r *pack) readSixByteUint64(dest *uint64) error {
 func (r *pack) readUint64(dest *uint64) error {
 	readUint64(r.Buffer.Next(8), dest)
 	return nil
+}
+
+func (r *pack) readDateTime() time.Time {
+	length, _ := r.ReadByte()
+	var year uint16
+	var month, day, hour, minute, second byte
+	var microSecond uint32
+
+	if length == 0 {
+		return time.Time{}.In(time.Local)
+	}
+
+	r.readUint16(&year)
+	month, _ = r.ReadByte()
+	day, _ = r.ReadByte()
+
+	if length >= 7 {
+		hour, _ = r.ReadByte()
+		minute, _ = r.ReadByte()
+		second, _ = r.ReadByte()
+	}
+
+	if length == 11 {
+		r.readUint32(&microSecond)
+	}
+
+	return time.Date(
+		int(year), time.Month(month), int(day), int(hour), int(minute), int(second), int(microSecond),
+		time.Local,
+	)
+}
+
+func (r *pack) readTime() time.Duration {
+	length, _ := r.ReadByte()
+	var days uint32
+	var hour, minute, second byte
+	var microSecond uint32
+
+	if length == 0 {
+		return time.Duration(0)
+	}
+
+	isNegative, _ := r.ReadByte()
+
+	r.readUint32(&days)
+	hour, _ = r.ReadByte()
+	minute, _ = r.ReadByte()
+	second, _ = r.ReadByte()
+
+	if length == 12 {
+		r.readUint32(&microSecond)
+	}
+
+	d := time.Duration(
+		time.Duration(days)*24*time.Hour +
+			time.Duration(hour)*time.Hour +
+			time.Duration(minute)*time.Minute +
+			time.Duration(second)*time.Second +
+			time.Duration(microSecond)*time.Microsecond,
+	)
+
+	if isNegative == 1 {
+		return -d
+	}
+
+	return d
+}
+
+//got from https://github.com/whitesock/open-replicator
+//toDecimal method
+//mysql.com have incorrect manual
+func (r *pack) readNewDecimal(precission, scale int) *big.Rat {
+	size := getDecimalBinarySize(precission, scale)
+
+	buff := r.Next(size)
+	positive := (buff[0] & 0x80) == 0x80
+	buff[0] ^= 0x80
+
+	if !positive {
+		for i := 0; i < size; i++ {
+			buff[i] ^= 0xFF
+		}
+	}
+
+	decimalPack := newPackWithBuff(buff)
+
+	var value string
+
+	x := precission - scale
+
+	unCompIntegral := x / _DIGITS_PER_INTEGER
+	unCompFraction := scale / _DIGITS_PER_INTEGER
+
+	compIntegral := x - (unCompIntegral * _DIGITS_PER_INTEGER)
+	compFractional := scale - (unCompFraction * _DIGITS_PER_INTEGER)
+
+	size = compressedBytes[compIntegral]
+
+	if size > 0 {
+		value = decimalPack.readDecimalStringBySize(size)
+	}
+
+	for i := 1; i <= unCompIntegral; i++ {
+		value += decimalPack.readDecimalStringBySize(4)
+	}
+
+	value += "."
+
+	for i := 1; i <= unCompFraction; i++ {
+		value += decimalPack.readDecimalStringBySize(4)
+	}
+
+	size = compressedBytes[compFractional]
+
+	if size > 0 {
+		value += decimalPack.readDecimalStringBySize(size)
+	}
+
+	rat, _ := new(big.Rat).SetString(value)
+
+	return rat
+}
+
+func (r *pack) readDecimalStringBySize(size int) string {
+	var value int
+	switch size {
+	case 1:
+		val, _ := r.ReadByte()
+		value = int(val)
+	case 2:
+		var val uint16
+		readUintRevert(r.Next(2), &val)
+
+		value = int(val)
+	case 3:
+		var val uint32
+		r.readThreeByteUint32(&val)
+		value = int(val)
+	case 4:
+		var val uint32
+		r.readThreeByteUint32(&val)
+		value = int(val)
+	}
+	return strconv.Itoa(value)
 }
 
 func (r *pack) readNilString() ([]byte, error) {
@@ -248,4 +403,13 @@ func (r *pack) isError() error {
 
 func (r *pack) isEOF() bool {
 	return r.buff[0] == _MYSQL_EOF
+}
+
+func getDecimalBinarySize(precission, scale int) int {
+	x := precission - scale
+	ipDigits := x / _DIGITS_PER_INTEGER
+	fpDigits := scale / _DIGITS_PER_INTEGER
+	ipDigitsX := x - ipDigits*_DIGITS_PER_INTEGER
+	fpDigitsX := scale - fpDigits*_DIGITS_PER_INTEGER
+	return (ipDigits << 2) + compressedBytes[ipDigitsX] + (fpDigits << 2) + compressedBytes[fpDigitsX]
 }
