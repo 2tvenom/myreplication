@@ -12,6 +12,8 @@ type (
 		packReader *packReader
 		packWriter *packWriter
 
+		currentDb string
+
 		masterPosition uint64
 		fileName       string
 	}
@@ -113,6 +115,49 @@ func (c *connection) query(command string) (*resultSet, error) {
 	rs := &resultSet{}
 	rs.setReader(c.packReader)
 	err = rs.init()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return rs, nil
+}
+
+func (c *connection) connectDb(db string) error {
+	q := &connectDb{}
+	pack := q.writeServer(db)
+	err := c.packWriter.flush(pack)
+	if err != nil {
+		return err
+	}
+
+	pack, err = c.packReader.readNextPack()
+
+	if err != nil {
+		return err
+	}
+
+	return pack.isError()
+}
+
+func (c *connection) fieldList(db, table string) (*resultSet, error) {
+	if c.currentDb != db {
+		err := c.connectDb(db)
+		if err != nil {
+			return nil, nil
+		}
+	}
+
+	q := &fieldList{}
+	pack := q.writeServer(table)
+	err := c.packWriter.flush(pack)
+	if err != nil {
+		return nil, err
+	}
+
+	rs := &resultSet{}
+	rs.setReader(c.packReader)
+	err = rs.initFieldList()
 
 	if err != nil {
 		return nil, err

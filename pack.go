@@ -191,8 +191,8 @@ func (r *pack) readTime() time.Duration {
 	return d
 }
 
-//got from https://github.com/whitesock/open-replicator
-//toDecimal method
+//got from https://github.com/whitesock/open-replicator toDecimal method
+// and https://github.com/jeremycole/mysql_binlog/blob/master/lib/mysql_binlog/binlog_field_parser.rb#L233
 //mysql.com have incorrect manual
 func (r *pack) readNewDecimal(precission, scale int) *big.Rat {
 	size := getDecimalBinarySize(precission, scale)
@@ -211,6 +211,10 @@ func (r *pack) readNewDecimal(precission, scale int) *big.Rat {
 
 	var value string
 
+	if !positive {
+		value += "-"
+	}
+
 	x := precission - scale
 
 	unCompIntegral := x / _DIGITS_PER_INTEGER
@@ -222,7 +226,7 @@ func (r *pack) readNewDecimal(precission, scale int) *big.Rat {
 	size = compressedBytes[compIntegral]
 
 	if size > 0 {
-		value = decimalPack.readDecimalStringBySize(size)
+		value += decimalPack.readDecimalStringBySize(size)
 	}
 
 	for i := 1; i <= unCompIntegral; i++ {
@@ -254,16 +258,15 @@ func (r *pack) readDecimalStringBySize(size int) string {
 		value = int(val)
 	case 2:
 		var val uint16
-		readUintRevert(r.Next(2), &val)
-
+		readUint16Revert(r.Next(2), &val)
 		value = int(val)
 	case 3:
 		var val uint32
-		r.readThreeByteUint32(&val)
+		readThreeBytesUint32Revert(r.Next(3), &val)
 		value = int(val)
 	case 4:
 		var val uint32
-		r.readThreeByteUint32(&val)
+		readUint32Revert(r.Next(4), &val)
 		value = int(val)
 	}
 	return strconv.Itoa(value)

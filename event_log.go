@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"strconv"
 )
 
 type (
@@ -19,6 +18,10 @@ type (
 		headerDeleteRowsEventV1Length byte
 		headerUpdateRowsEventV1Length byte
 		headerWriteRowsEventV1Length  byte
+
+		tableColumns map[string]map[string][]*columnSet
+
+		lastTableMapEvent *TableMapEvent
 	}
 
 	eventLogHeader struct {
@@ -128,6 +131,8 @@ type (
 		Type     byte
 		MetaInfo []byte
 		Nullable bool
+		Unsigned bool
+		Name     string
 	}
 
 	rowsEvent struct {
@@ -136,10 +141,11 @@ type (
 		postHeaderLength byte
 		version          byte
 
-		TableId   uint64
-		Flags     uint16
-		ExtraData []byte
-		Values    [][]*RowsEventValue
+		tableId   uint64
+		flags     uint16
+		extraData []byte
+		values    [][]*RowsEventValue
+		newValues [][]*RowsEventValue
 	}
 
 	RowsEventValue struct {
@@ -147,9 +153,8 @@ type (
 		IsNull   bool
 		Value    interface{}
 		Type     byte
+		Name     string
 	}
-
-	UpdateRowsEvent rowsEvent
 
 	unknownEvent struct {
 		*eventLogHeader
@@ -159,36 +164,40 @@ type (
 		read(*pack)
 	}
 
-	AppendBlockEvent BeginLoadQueryEvent
-	ignorableEvent   unknownEvent
-	HeartBeatEvent   unknownEvent
-	StopEvent        unknownEvent
-	slaveEvent       unknownEvent
+	AppendBlockEvent struct {
+		*BeginLoadQueryEvent
+	}
+
+	StopEvent struct {
+		*unknownEvent
+	}
+
+	slaveEvent struct {
+		*unknownEvent
+	}
+
+	ignorableEvent struct {
+		*unknownEvent
+	}
+
+	HeartBeatEvent struct {
+		*unknownEvent
+	}
 )
 
-func (event *rowsEvent) setTableMapEvent(tableMapEvent *TableMapEvent) {
-	event.tableMapEvent = tableMapEvent
-}
-
-func (event *rowsEvent) setPostHeaderLength(length byte) {
-	event.postHeaderLength = length
-}
-
-func (event *rowsEvent) setVersion(version byte) {
-	event.version = version
-}
-
-func (event *rowsEvent) IsTrue(columnId int, bitmap []byte) bool {
+func isTrue(columnId int, bitmap []byte) bool {
 	return (bitmap[columnId/8]>>uint8(columnId%8))&1 == 1
 }
 
 func (event *rowsEvent) read(pack *pack) {
+	isUpdateEvent := event.EventType == _UPDATE_ROWS_EVENTv1 || event.EventType == _UPDATE_ROWS_EVENTv2
+
 	if event.postHeaderLength == 6 {
 		var tableId uint32
 		pack.readUint32(&tableId)
-		event.TableId = uint64(tableId)
+		event.tableId = uint64(tableId)
 	} else {
-		pack.readSixByteUint64(&event.TableId)
+		pack.readSixByteUint64(&event.tableId)
 	}
 
 	pack.readUint16(&event.Flags)
@@ -196,7 +205,7 @@ func (event *rowsEvent) read(pack *pack) {
 	if event.version == 2 {
 		var extraDataLength uint16
 		pack.readUint16(&extraDataLength)
-		event.ExtraData = pack.Next(int(extraDataLength))
+		event.extraData = pack.Next(int(extraDataLength))
 	}
 
 	var (
@@ -208,31 +217,42 @@ func (event *rowsEvent) read(pack *pack) {
 
 	bitMapLength := int((columnCount + 7) / 8)
 
-	var columnPresentBitmap1, nullBitmap1 []byte
+	var columnPreset, columnPresentBitmap1, columnPresentBitmap2, nullBitmap []byte
 
 	columnPresentBitmap1 = pack.Next(bitMapLength)
 
-	if event.EventType == _UPDATE_ROWS_EVENTv1 || event.EventType == _UPDATE_ROWS_EVENTv2 {
-		//		columnPresentBitmap2 = pack.Next(bitMapLength)
+	if isUpdateEvent {
+		columnPresentBitmap2 = pack.Next(bitMapLength)
 	}
 
-	event.Values = [][]*RowsEventValue{}
+	event.values = [][]*RowsEventValue{}
+	event.newValues = [][]*RowsEventValue{}
+
+	switcher := true
 
 	for {
-		nullBitmap1 = pack.Next(bitMapLength)
+		nullBitmap = pack.Next(bitMapLength)
 
 		row := []*RowsEventValue{}
 		for i, column := range event.tableMapEvent.Columns {
-			if !event.IsTrue(i, columnPresentBitmap1) {
+
+			if switcher {
+				columnPreset = columnPresentBitmap1
+			} else {
+				columnPreset = columnPresentBitmap2
+			}
+
+			if !isTrue(i, columnPreset) {
 				continue
 			}
 
 			value := &RowsEventValue{
 				ColumnId: i,
 				Type:     column.Type,
+				Name:     column.Name,
 			}
 
-			if event.IsTrue(i, nullBitmap1) {
+			if isTrue(i, nullBitmap) {
 				value.Value = nil
 				value.IsNull = true
 			} else {
@@ -245,24 +265,41 @@ func (event *rowsEvent) read(pack *pack) {
 					val, _ := pack.readStringLength()
 					value.Value = string(val)
 				case _MYSQL_TYPE_DECIMAL, _MYSQL_TYPE_NEWDECIMAL:
-					val, _ := pack.readStringLength()
-					value.Value, _ = strconv.ParseFloat(string(val), 64)
+					value.Value = pack.readNewDecimal(int(column.MetaInfo[0]), int(column.MetaInfo[1]))
 				case _MYSQL_TYPE_LONGLONG:
 					var val uint64
 					pack.readUint64(&val)
-					value.Value = val
+					if column.Unsigned {
+						value.Value = val
+					} else {
+						value.Value = int64(val)
+					}
+
 				case _MYSQL_TYPE_LONG:
 					var val uint32
 					pack.readUint32(&val)
-					value.Value = val
+					if column.Unsigned {
+						value.Value = val
+					} else {
+						value.Value = int32(val)
+					}
 				case _MYSQL_TYPE_INT24:
 					var val uint32
 					pack.readThreeByteUint32(&val)
-					value.Value = val
+					if column.Unsigned {
+						value.Value = val
+					} else {
+						value.Value = int32(val)
+					}
+
 				case _MYSQL_TYPE_SHORT, _MYSQL_TYPE_YEAR:
 					var val uint16
 					pack.readUint16(&val)
-					value.Value = val
+					if column.Unsigned {
+						value.Value = val
+					} else {
+						value.Value = int16(val)
+					}
 				case _MYSQL_TYPE_TINY:
 					value.Value, _ = pack.ReadByte()
 				case _MYSQL_TYPE_FLOAT:
@@ -282,7 +319,15 @@ func (event *rowsEvent) read(pack *pack) {
 			row = append(row, value)
 		}
 
-		event.Values = append(event.Values, row)
+		if switcher {
+			event.values = append(event.values, row)
+		} else {
+			event.newValues = append(event.newValues, row)
+		}
+
+		if isUpdateEvent {
+			switcher = !switcher
+		}
 
 		if pack.Len() == 0 {
 			break
@@ -463,7 +508,7 @@ func (event *startEventV3Event) read(pack *pack) {
 	pack.readUint32(&event.createTimestamp)
 }
 
-func (eh *eventLogHeader) read(pack *pack) {
+func (eh *eventLogHeader) readHead(pack *pack) {
 	pack.ReadByte()
 	pack.readUint32(&eh.Timestamp)
 	eh.EventType, _ = pack.ReadByte()
@@ -476,7 +521,26 @@ func (eh *eventLogHeader) read(pack *pack) {
 func newEventLog(mysqlConnection *connection) *eventLog {
 	return &eventLog{
 		mysqlConnection: mysqlConnection,
+		tableColumns:    map[string]map[string][]*columnSet{},
 	}
+}
+
+func (ev *eventLog) getColumnSet(db, table string) ([]*columnSet, error) {
+	if _, ok := ev.tableColumns[db]; !ok {
+		ev.tableColumns[db] = map[string][]*columnSet{}
+	}
+
+	if _, ok := ev.tableColumns[db][table]; !ok {
+		rs, err := ev.mysqlConnection.fieldList(db, table)
+
+		if err != nil {
+			return nil, err
+		}
+
+		ev.tableColumns[db][table] = rs.columns
+	}
+
+	return ev.tableColumns[db][table], nil
 }
 
 func (ev *eventLog) start() {
@@ -496,16 +560,15 @@ func (ev *eventLog) start() {
 			ev.binlogVersion = e.binlogVersion
 			ev.headerQueryEventLength = e.eventTypeHeaderLengths[_FORMAT_DESCRIPTION_LENGTH_QUERY_POSITION]
 
-			ev.headerDeleteRowsEventV1Length = 6
-			ev.headerUpdateRowsEventV1Length = 6
-			ev.headerWriteRowsEventV1Length = 6
+			ev.headerDeleteRowsEventV1Length = 8
+			ev.headerUpdateRowsEventV1Length = 8
+			ev.headerWriteRowsEventV1Length = 8
 
 			if len(e.eventTypeHeaderLengths) >= 24 {
 				ev.headerDeleteRowsEventV1Length = e.eventTypeHeaderLengths[_FORMAT_DESCRIPTION_LENGTH_DELETEV1_POSITION]
 				ev.headerUpdateRowsEventV1Length = e.eventTypeHeaderLengths[_FORMAT_DESCRIPTION_LENGTH_UPDATEV1_POSITION]
 				ev.headerWriteRowsEventV1Length = e.eventTypeHeaderLengths[_FORMAT_DESCRIPTION_LENGTH_WRITEV1_POSITION]
 			}
-
 		case *logRotateEvent:
 			ev.lastRotateFileName = e.binlogFileName
 			println("rotate", e.position, string(e.binlogFileName))
@@ -541,16 +604,41 @@ func (ev *eventLog) start() {
 			//redirect to chan
 			println("rand")
 		case *TableMapEvent:
-			//redirect to chan
-			println("table event")
+			println("Table map event")
+			ev.lastTableMapEvent = e
+			columnSet, err := ev.getColumnSet(e.SchemaName, e.TableName)
+fmt.Printf("%v\n", columnSet)
+			if err != nil {
+				println("Column set error", err)
+				break
+			}
+
+			for i, column := range columnSet {
+				ev.lastTableMapEvent.Columns[i].Unsigned = column.flags&
+					MYSQL_FLAG_COLUMN_UNSIGNED == MYSQL_FLAG_COLUMN_UNSIGNED
+				ev.lastTableMapEvent.Columns[i].Name = string(column.org_name)
+				println(i, ev.lastTableMapEvent.Columns[i].Name)
+			}
+
+		case *rowsEvent:
+			println("row event")
+			for i, row := range e.values {
+				for j, col := range row {
+					fmt.Printf("%d %d - %s %v %b", i, j, col.Name, col.Value, e.tableMapEvent.Columns[i].Unsigned)
+				}
+			}
 			////////// trash events
 		case *slaveEvent:
+			println("slave")
 			//no action
 		case *unknownEvent:
+			println("unknows")
 			//no action
 		case *ignorableEvent:
+			println("ignorable")
 			//no action
 		case *HeartBeatEvent:
+			println("heartbeat")
 			//no action
 		}
 	}
@@ -564,7 +652,7 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 	}
 
 	header := &eventLogHeader{}
-	header.read(pack)
+	header.readHead(pack)
 
 	var event binLogEvent
 
@@ -599,8 +687,10 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 			eventLogHeader: header,
 		}
 	case _APPEND_BLOCK_EVENT:
-		event = &BeginLoadQueryEvent{
-			eventLogHeader: header,
+		event = &AppendBlockEvent {
+			&BeginLoadQueryEvent{
+				eventLogHeader: header,
+			},
 		}
 	case _EXECUTE_LOAD_QUERY_EVENT:
 		event = &ExecuteLoadQueryEvent{
@@ -616,15 +706,21 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 		}
 	case _IGNORABLE_EVENT:
 		event = &ignorableEvent{
-			eventLogHeader: header,
+			&unknownEvent {
+				eventLogHeader: header,
+			},
 		}
 	case _HEARTBEAT_EVENT:
 		event = &HeartBeatEvent{
-			eventLogHeader: header,
+			&unknownEvent {
+				eventLogHeader: header,
+			},
 		}
 	case _STOP_EVENT:
 		event = &StopEvent{
-			eventLogHeader: header,
+			&unknownEvent {
+				eventLogHeader: header,
+			},
 		}
 	case _INCIDENT_EVENT:
 		event = &IncidentEvent{
@@ -632,16 +728,41 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 		}
 	case _SLAVE_EVENT:
 		event = &slaveEvent{
-			eventLogHeader: header,
+			&unknownEvent {
+				eventLogHeader: header,
+			},
 		}
 	case _RAND_EVENT:
 		event = &RandEvent{
 			eventLogHeader: header,
 		}
-		//	case _TABLE_MAP_EVENT:
-		//		event = &TableMapEvent{
-		//			eventLogHeader: header,
-		//		}
+	case _TABLE_MAP_EVENT:
+		event = &TableMapEvent{
+			eventLogHeader: header,
+		}
+	case _DELETE_ROWS_EVENTv0:
+		fallthrough
+	case _DELETE_ROWS_EVENTv1:
+		fallthrough
+	case _DELETE_ROWS_EVENTv2:
+		fallthrough
+	case _UPDATE_ROWS_EVENTv0:
+		fallthrough
+	case _UPDATE_ROWS_EVENTv1:
+		fallthrough
+	case _UPDATE_ROWS_EVENTv2:
+		fallthrough
+	case _WRITE_ROWS_EVENTv0:
+		fallthrough
+	case _WRITE_ROWS_EVENTv1:
+		fallthrough
+	case _WRITE_ROWS_EVENTv2:
+		event = &rowsEvent{
+			eventLogHeader: header,
+			version: byte(ev.binlogVersion),
+			postHeaderLength: ev.headerWriteRowsEventV1Length,
+			tableMapEvent: ev.lastTableMapEvent,
+		}
 	default:
 		println("Unknown event")
 		println(fmt.Sprintf("% x\n", pack.buff))
@@ -651,9 +772,6 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 	ev.lastRotatePosition = header.NextPosition
 	event.read(pack)
 
-	if header.EventType == _APPEND_BLOCK_EVENT {
-		return event.(*AppendBlockEvent), nil
-	}
 
 	return event, nil
 }

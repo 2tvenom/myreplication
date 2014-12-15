@@ -837,7 +837,6 @@ func TestReadTime(t *testing.T) {
 }
 
 func TestNewDecimal(t *testing.T) {
-
 	type decimalTestCase struct {
 		buff              []byte
 		expectedDecimal   float64
@@ -854,6 +853,36 @@ func TestNewDecimal(t *testing.T) {
 			precission:      6,
 			scale:           2,
 			expectedDecimal: 7777.66,
+		},
+		&decimalTestCase{
+			buff: []byte{
+				0x07, 0x00, 0x00, 0x01,
+				0x84, 0xd2, 0x38,
+				0x00, 0x00, 0x02, 0x00,
+			},
+			precission:      6,
+			scale:           2,
+			expectedDecimal: 1234.56,
+		},
+		&decimalTestCase{
+			buff: []byte{
+				0x09, 0x00, 0x00, 0x01,
+				0x80, 0x00, 0x00, 0x01, 0x4d,
+				0x00, 0x00, 0x02, 0x00,
+			},
+			precission:      10,
+			scale:           0,
+			expectedDecimal: 333,
+		},
+		&decimalTestCase{
+			buff: []byte{
+				0x09, 0x00, 0x00, 0x01,
+				0x7f, 0xff, 0xff, 0xfe, 0xb2,
+				0x00, 0x00, 0x02, 0x00,
+			},
+			precission:      10,
+			scale:           0,
+			expectedDecimal: -333,
 		},
 	}
 

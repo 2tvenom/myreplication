@@ -81,22 +81,7 @@ func (rs *resultSet) init() error {
 		}
 		sequenceId++
 
-		cs := &columnSet{}
-		cs.catalog, _ = columnPack.readStringLength()
-		cs.schema, _ = columnPack.readStringLength()
-		cs.table, _ = columnPack.readStringLength()
-		cs.org_table, _ = columnPack.readStringLength()
-		cs.name, _ = columnPack.readStringLength()
-		cs.org_name, _ = columnPack.readStringLength()
-		//filler
-		columnPack.ReadByte()
-		columnPack.readUint16(&cs.character_set)
-		columnPack.readUint32(&cs.column_length)
-		cs.column_type, _ = columnPack.ReadByte()
-		columnPack.readUint16(&cs.flags)
-		cs.decimals, _ = columnPack.ReadByte()
-
-		rs.columns[i] = cs
+		rs.columns[i] = packToColumnPack(columnPack)
 	}
 
 	pack, err = rs.reader.readNextPack()
@@ -108,6 +93,7 @@ func (rs *resultSet) init() error {
 	if sequenceId != pack.getSequence() {
 		panic("Incorrect sequence")
 	}
+
 	rs.finish = false
 	rs.sequenceId = pack.getSequence()
 	rs.sequenceId++
@@ -120,6 +106,58 @@ func (rs *resultSet) init() error {
 	pack.readUint16(&rs.lastStatus)
 
 	return nil
+}
+
+func (rs *resultSet) initFieldList() error {
+	rs.columns = []*columnSet{}
+
+	for {
+		columnPack, err := rs.reader.readNextPack()
+
+		if err != nil {
+			return err
+		}
+
+		err = columnPack.isError()
+
+		if err != nil {
+			return err
+		}
+
+		if columnPack.isEOF() {
+			columnPack.readUint16(&rs.lastWarning)
+			columnPack.readUint16(&rs.lastStatus)
+			break
+		}
+
+		columnDef := packToColumnPack(columnPack)
+		rs.columns = append(rs.columns, columnDef)
+	}
+
+	rs.finish = true
+
+	return nil
+}
+
+func packToColumnPack(columnPack *pack) *columnSet {
+	cs := &columnSet{}
+	cs.catalog, _ = columnPack.readStringLength()
+	cs.schema, _ = columnPack.readStringLength()
+	cs.table, _ = columnPack.readStringLength()
+	cs.org_table, _ = columnPack.readStringLength()
+	cs.name, _ = columnPack.readStringLength()
+	cs.org_name, _ = columnPack.readStringLength()
+	//filler
+	filler, _ := columnPack.ReadByte()
+	if filler != 0x0c {
+		panic("incorrect filler")
+	}
+	columnPack.readUint16(&cs.character_set)
+	columnPack.readUint32(&cs.column_length)
+	cs.column_type, _ = columnPack.ReadByte()
+	columnPack.readUint16(&cs.flags)
+	cs.decimals, _ = columnPack.ReadByte()
+	return cs
 }
 
 func (rs *resultSet) nextRow() (*pack, error) {
