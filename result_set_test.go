@@ -453,21 +453,21 @@ func TestFieldList(t *testing.T) {
 		&checkPair{"org_table", "table01", rs.columns[0].org_table},
 		&checkPair{"name", "id", rs.columns[0].name},
 		&checkPair{"org_name", "id", rs.columns[0].org_name},
-		&checkPair{"column_type", _MYSQL_TYPE_LONG, rs.columns[0].column_type},
+		&checkPair{"column_type", MYSQL_TYPE_LONG, rs.columns[0].column_type},
 
 		&checkPair{"schema", "test", rs.columns[1].schema},
 		&checkPair{"table", "table01", rs.columns[1].table},
 		&checkPair{"org_table", "table01", rs.columns[1].org_table},
 		&checkPair{"name", "data", rs.columns[1].name},
 		&checkPair{"org_name", "data", rs.columns[1].org_name},
-		&checkPair{"column_type", _MYSQL_TYPE_VAR_STRING, rs.columns[1].column_type},
+		&checkPair{"column_type", MYSQL_TYPE_VAR_STRING, rs.columns[1].column_type},
 
 		&checkPair{"schema", "test", rs.columns[2].schema},
 		&checkPair{"table", "table01", rs.columns[2].table},
 		&checkPair{"org_table", "table01", rs.columns[2].org_table},
 		&checkPair{"name", "dl", rs.columns[2].name},
 		&checkPair{"org_name", "dl", rs.columns[2].org_name},
-		&checkPair{"column_type", _MYSQL_TYPE_DOUBLE, rs.columns[2].column_type},
+		&checkPair{"column_type", MYSQL_TYPE_DOUBLE, rs.columns[2].column_type},
 	}
 
 	for _, pair := range checkDataMap {

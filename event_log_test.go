@@ -291,35 +291,35 @@ func TestQueryEvent(t *testing.T) {
 		}
 		query.read(pack)
 
-		if query.Query != test.query {
+		if query.GetQuery() != test.query {
 			t.Fatal(
 				"Incorrect query",
 				"expected", test.query,
-				"got", query.Query,
+				"got", query.GetQuery(),
 			)
 		}
 
-		if query.Schema != test.schema {
+		if query.GetSchema() != test.schema {
 			t.Fatal(
 				"Incorrect schema",
 				"expected", test.schema,
-				"got", query.Schema,
+				"got", query.GetSchema(),
 			)
 		}
 
-		if query.ErrorCode != test.errorCode {
+		if query.GetErrorCode() != test.errorCode {
 			t.Fatal(
 				"Incorrect error code",
 				"expected", test.errorCode,
-				"got", query.ErrorCode,
+				"got", query.GetErrorCode(),
 			)
 		}
 
-		if query.ExecutionTime != test.executionTime {
+		if query.GetExecutionTime() != test.executionTime {
 			t.Fatal(
 				"Incorrect execution time",
 				"expected", test.executionTime,
-				"got", query.ExecutionTime,
+				"got", query.GetExecutionTime(),
 			)
 		}
 	}
@@ -395,19 +395,19 @@ func TestIntVarEvent(t *testing.T) {
 
 	var expectedValue uint64 = 1
 
-	if intVar.Value != expectedValue {
+	if intVar.GetValue() != expectedValue {
 		t.Fatal(
 			"Incorrect value",
 			"expected", expectedValue,
-			"got", intVar.Value,
+			"got", intVar.GetValue(),
 		)
 	}
 
-	if intVar.Type != INSERT_ID_EVENT {
+	if intVar.GetType() != INSERT_ID_EVENT {
 		t.Fatal(
 			"Incorrect type",
 			"expected", INSERT_ID_EVENT,
-			"got", intVar.Type,
+			"got", intVar.GetType(),
 		)
 	}
 }
@@ -443,21 +443,21 @@ func TestBeginLoadQueryEvent(t *testing.T) {
 
 	var expectedFileId uint32 = 1
 
-	if beginEvent.FileId != expectedFileId {
+	if beginEvent.fileId != expectedFileId {
 		t.Fatal(
 			"Incorrect file id",
 			"expected", expectedFileId,
-			"got", beginEvent.FileId,
+			"got", beginEvent.fileId,
 		)
 	}
 
 	expectedBlockData := "5,hello\n6,world\n"
 
-	if beginEvent.BlockData != expectedBlockData {
+	if beginEvent.GetData() != expectedBlockData {
 		t.Fatal(
 			"Incorrect block data",
 			"expected", expectedBlockData,
-			"got", beginEvent.BlockData,
+			"got", beginEvent.GetData(),
 		)
 	}
 }
@@ -503,42 +503,42 @@ func TestExecuteLoadQueryEvent(t *testing.T) {
 
 	expectedSchema := "test"
 
-	if executeLoad.Schema != expectedSchema {
+	if executeLoad.GetSchema() != expectedSchema {
 		t.Fatal(
 			"Incorrect schema",
 			"expected", expectedSchema,
-			"got", executeLoad.Schema,
+			"got", executeLoad.GetSchema(),
 		)
 	}
 
 	var expectedErrorCode uint16 = 0
 
-	if executeLoad.ErrorCode != expectedErrorCode {
+	if executeLoad.GetErrorCode() != expectedErrorCode {
 		t.Fatal(
 			"Incorrect error code",
 			"expected", expectedErrorCode,
-			"got", executeLoad.ErrorCode,
+			"got", executeLoad.GetErrorCode(),
 		)
 	}
 
 	var expectedExecutionTime uint32 = 0
 
-	if executeLoad.ExecutionTime != expectedExecutionTime {
+	if executeLoad.GetExecutionTime() != expectedExecutionTime {
 		t.Fatal(
 			"Incorrect execution time",
 			"expected", expectedExecutionTime,
-			"got", executeLoad.ExecutionTime,
+			"got", executeLoad.GetExecutionTime(),
 		)
 	}
 
 	expectedQuery := "LOAD DATA INFILE 'data' INTO TABLE `table01` FIELDS TERMINATED BY ',' ENCLOSED BY '' "
 	expectedQuery += "ESCAPED BY '\\\\' LINES TERMINATED BY '\\n' (`id`, `data`)"
 
-	if executeLoad.Query != expectedQuery {
+	if executeLoad.GetQuery() != expectedQuery {
 		t.Fatal(
 			"Incorrect query",
 			"expected", expectedQuery,
-			"got", executeLoad.Query,
+			"got", executeLoad.GetQuery(),
 		)
 	}
 }
@@ -574,31 +574,31 @@ func TestUserVarEvent(t *testing.T) {
 
 	expectedName := "var_name"
 
-	if userVar.Name != expectedName {
+	if userVar.GetName() != expectedName {
 		t.Fatal(
 			"Incorrect variable name",
 			"expected", expectedName,
-			"got", userVar.Name,
+			"got", userVar.GetName(),
 		)
 	}
 
 	expectedIsNil := false
 
-	if userVar.IsNil != expectedIsNil {
+	if userVar.IsNil() != expectedIsNil {
 		t.Fatal(
 			"Incorrect is_null",
 			"expected", expectedIsNil,
-			"got", userVar.IsNil,
+			"got", userVar.IsNil(),
 		)
 	}
 
 	expectedValue := "sssss"
 
-	if userVar.Value != expectedValue {
+	if userVar.GetValue() != expectedValue {
 		t.Fatal(
 			"Incorrect value",
 			"expected", expectedValue,
-			"got", userVar.Value,
+			"got", userVar.GetValue(),
 		)
 	}
 }
@@ -634,19 +634,19 @@ func TestRandEvent(t *testing.T) {
 	var expectedSeed1 uint64 = 508492479
 	var expectedSeed2 uint64 = 1006902390
 
-	if rand.Seed1 != expectedSeed1 {
+	if rand.GetSeed1() != expectedSeed1 {
 		t.Fatal(
 			"Incorrect seed1",
 			"expected", expectedSeed1,
-			"got", rand.Seed1,
+			"got", rand.GetSeed1(),
 		)
 	}
 
-	if rand.Seed2 != expectedSeed2 {
+	if rand.GetSeed2() != expectedSeed2 {
 		t.Fatal(
 			"Incorrect seed2",
 			"expected", expectedSeed2,
-			"got", rand.Seed2,
+			"got", rand.GetSeed2(),
 		)
 	}
 }
@@ -661,10 +661,6 @@ func getTableMapEvent(mockHandshake []byte) *TableMapEvent {
 	table := &TableMapEvent{}
 	table.eventLogHeader = header
 	table.read(pack)
-
-	for i := range table.Columns {
-		table.Columns[i].Unsigned = true
-	}
 
 	return table
 }
@@ -758,25 +754,25 @@ func TestTableMapEvent(t *testing.T) {
 	)
 
 	testsCases := []*TableMapEventTest{
-		&TableMapEventTest{_MYSQL_TYPE_LONG, false, []byte{}},                // `id` int(11) NOT NULL AUTO_INCREMENT,
-		&TableMapEventTest{_MYSQL_TYPE_TINY, true, []byte{}},                 // `i1` tinyint(4) DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_TINY, true, []byte{}},                 // `i2` tinyint(3) unsigned DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_SHORT, true, []byte{}},                // `i3` smallint(6) DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_SHORT, false, []byte{}},               // `i4` smallint(5) unsigned NOT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_INT24, true, []byte{}},                // `i5` mediumint(9) DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_INT24, true, []byte{}},                // `i6` mediumint(8) unsigned DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_LONG, false, []byte{}},                // `i7` int(11) NOT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_LONG, true, []byte{}},                 // `i8` int(10) unsigned DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_LONG, true, []byte{}},                 // `i9` int(11) DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_LONG, false, []byte{}},                // `1i0` int(10) unsigned NOT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_LONGLONG, true, []byte{}},             // `1i1` bigint(20) DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_LONGLONG, true, []byte{}},             // `1i2` bigint(20) unsigned DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_NEWDECIMAL, true, []byte{0x0a, 0x00}}, // `1i3` decimal(10,0) DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_NEWDECIMAL, true, []byte{0x0a, 0x00}}, // `1i4` decimal(10,0) unsigned DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_DOUBLE, true, []byte{0x08}},           // `1i5` double DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_DOUBLE, true, []byte{0x08}},           // `1i6` double unsigned DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_FLOAT, true, []byte{0x04}},            // `1i7` float DEFAULT NULL,
-		&TableMapEventTest{_MYSQL_TYPE_FLOAT, true, []byte{0x04}},            // `1i8` float unsigned DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_LONG, false, []byte{}},                // `id` int(11) NOT NULL AUTO_INCREMENT,
+		&TableMapEventTest{MYSQL_TYPE_TINY, true, []byte{}},                 // `i1` tinyint(4) DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_TINY, true, []byte{}},                 // `i2` tinyint(3) unsigned DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_SHORT, true, []byte{}},                // `i3` smallint(6) DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_SHORT, false, []byte{}},               // `i4` smallint(5) unsigned NOT NULL,
+		&TableMapEventTest{MYSQL_TYPE_INT24, true, []byte{}},                // `i5` mediumint(9) DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_INT24, true, []byte{}},                // `i6` mediumint(8) unsigned DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_LONG, false, []byte{}},                // `i7` int(11) NOT NULL,
+		&TableMapEventTest{MYSQL_TYPE_LONG, true, []byte{}},                 // `i8` int(10) unsigned DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_LONG, true, []byte{}},                 // `i9` int(11) DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_LONG, false, []byte{}},                // `1i0` int(10) unsigned NOT NULL,
+		&TableMapEventTest{MYSQL_TYPE_LONGLONG, true, []byte{}},             // `1i1` bigint(20) DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_LONGLONG, true, []byte{}},             // `1i2` bigint(20) unsigned DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_NEWDECIMAL, true, []byte{0x0a, 0x00}}, // `1i3` decimal(10,0) DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_NEWDECIMAL, true, []byte{0x0a, 0x00}}, // `1i4` decimal(10,0) unsigned DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_DOUBLE, true, []byte{0x08}},           // `1i5` double DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_DOUBLE, true, []byte{0x08}},           // `1i6` double unsigned DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_FLOAT, true, []byte{0x04}},            // `1i7` float DEFAULT NULL,
+		&TableMapEventTest{MYSQL_TYPE_FLOAT, true, []byte{0x04}},            // `1i8` float unsigned DEFAULT NULL,
 	}
 
 	for i, testCase := range testsCases {
@@ -842,9 +838,9 @@ func TestWriteRowsEventV1(t *testing.T) {
 			},
 			expectedValues: [][]*RowsEventValue{
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(12), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hi", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, false, 3.14, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(12), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hi", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, false, 3.14, MYSQL_TYPE_DOUBLE},
 				},
 			},
 		},
@@ -865,9 +861,9 @@ func TestWriteRowsEventV1(t *testing.T) {
 			},
 			expectedValues: [][]*RowsEventValue{
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(13), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hi", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, true, nil, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(13), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hi", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, true, nil, MYSQL_TYPE_DOUBLE},
 				},
 			},
 		},
@@ -904,14 +900,14 @@ func TestWriteRowsEventV1(t *testing.T) {
 			},
 			expectedValues: [][]*RowsEventValue{
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(14), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hi", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, true, nil, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(14), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hi", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, true, nil, MYSQL_TYPE_DOUBLE},
 				},
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(15), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hello", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, false, 22.0, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(15), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hello", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, false, 22.0, MYSQL_TYPE_DOUBLE},
 				},
 			},
 		},
@@ -1005,46 +1001,46 @@ func TestWriteRowsEventV1(t *testing.T) {
 
 			expectedValues: [][]*RowsEventValue{
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(2), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, true, nil, _MYSQL_TYPE_TINY, ""},
-					&RowsEventValue{2, false, byte(1), _MYSQL_TYPE_TINY, ""},
-					&RowsEventValue{3, false, uint16(2), _MYSQL_TYPE_SHORT, ""},
-					&RowsEventValue{4, false, uint16(3), _MYSQL_TYPE_SHORT, ""},
-					&RowsEventValue{5, false, uint32(4), _MYSQL_TYPE_INT24, ""},
-					&RowsEventValue{6, false, uint32(5), _MYSQL_TYPE_INT24, ""},
-					&RowsEventValue{7, false, uint32(6), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{8, false, uint32(7), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{9, false, uint32(8), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{10, false, uint32(9), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{11, true, nil, _MYSQL_TYPE_LONGLONG, ""},
-					&RowsEventValue{12, false, uint64(11), _MYSQL_TYPE_LONGLONG, ""},
-					&RowsEventValue{13, false, rat12, _MYSQL_TYPE_NEWDECIMAL, ""},
-					&RowsEventValue{14, false, rat13, _MYSQL_TYPE_NEWDECIMAL, ""},
-					&RowsEventValue{15, true, nil, _MYSQL_TYPE_DOUBLE, ""},
-					&RowsEventValue{16, false, 15.0, _MYSQL_TYPE_DOUBLE, ""},
-					&RowsEventValue{17, false, float32(16), _MYSQL_TYPE_FLOAT, ""},
-					&RowsEventValue{18, false, float32(17), _MYSQL_TYPE_FLOAT, ""},
+					&RowsEventValue{0, false, uint32(2), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, true, nil, MYSQL_TYPE_TINY},
+					&RowsEventValue{2, false, byte(1), MYSQL_TYPE_TINY},
+					&RowsEventValue{3, false, uint16(2), MYSQL_TYPE_SHORT},
+					&RowsEventValue{4, false, uint16(3), MYSQL_TYPE_SHORT},
+					&RowsEventValue{5, false, uint32(4), MYSQL_TYPE_INT24},
+					&RowsEventValue{6, false, uint32(5), MYSQL_TYPE_INT24},
+					&RowsEventValue{7, false, uint32(6), MYSQL_TYPE_LONG},
+					&RowsEventValue{8, false, uint32(7), MYSQL_TYPE_LONG},
+					&RowsEventValue{9, false, uint32(8), MYSQL_TYPE_LONG},
+					&RowsEventValue{10, false, uint32(9), MYSQL_TYPE_LONG},
+					&RowsEventValue{11, true, nil, MYSQL_TYPE_LONGLONG},
+					&RowsEventValue{12, false, uint64(11), MYSQL_TYPE_LONGLONG},
+					&RowsEventValue{13, false, rat12, MYSQL_TYPE_NEWDECIMAL},
+					&RowsEventValue{14, false, rat13, MYSQL_TYPE_NEWDECIMAL},
+					&RowsEventValue{15, true, nil, MYSQL_TYPE_DOUBLE},
+					&RowsEventValue{16, false, 15.0, MYSQL_TYPE_DOUBLE},
+					&RowsEventValue{17, false, float32(16), MYSQL_TYPE_FLOAT},
+					&RowsEventValue{18, false, float32(17), MYSQL_TYPE_FLOAT},
 				},
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(3), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, true, nil, _MYSQL_TYPE_TINY, ""},
-					&RowsEventValue{2, false, byte(18), _MYSQL_TYPE_TINY, ""},
-					&RowsEventValue{3, false, uint16(19), _MYSQL_TYPE_SHORT, ""},
-					&RowsEventValue{4, false, uint16(20), _MYSQL_TYPE_SHORT, ""},
-					&RowsEventValue{5, false, uint32(21), _MYSQL_TYPE_INT24, ""},
-					&RowsEventValue{6, false, uint32(22), _MYSQL_TYPE_INT24, ""},
-					&RowsEventValue{7, false, uint32(23), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{8, false, uint32(24), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{9, false, uint32(25), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{10, false, uint32(26), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{11, false, uint64(27), _MYSQL_TYPE_LONGLONG, ""},
-					&RowsEventValue{12, false, uint64(28), _MYSQL_TYPE_LONGLONG, ""},
-					&RowsEventValue{13, false, rat29, _MYSQL_TYPE_NEWDECIMAL, ""},
-					&RowsEventValue{14, false, rat30, _MYSQL_TYPE_NEWDECIMAL, ""},
-					&RowsEventValue{15, true, nil, _MYSQL_TYPE_DOUBLE, ""},
-					&RowsEventValue{16, false, 31.0, _MYSQL_TYPE_DOUBLE, ""},
-					&RowsEventValue{17, false, float32(32), _MYSQL_TYPE_FLOAT, ""},
-					&RowsEventValue{18, false, float32(33), _MYSQL_TYPE_FLOAT, ""},
+					&RowsEventValue{0, false, uint32(3), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, true, nil, MYSQL_TYPE_TINY},
+					&RowsEventValue{2, false, byte(18), MYSQL_TYPE_TINY},
+					&RowsEventValue{3, false, uint16(19), MYSQL_TYPE_SHORT},
+					&RowsEventValue{4, false, uint16(20), MYSQL_TYPE_SHORT},
+					&RowsEventValue{5, false, uint32(21), MYSQL_TYPE_INT24},
+					&RowsEventValue{6, false, uint32(22), MYSQL_TYPE_INT24},
+					&RowsEventValue{7, false, uint32(23), MYSQL_TYPE_LONG},
+					&RowsEventValue{8, false, uint32(24), MYSQL_TYPE_LONG},
+					&RowsEventValue{9, false, uint32(25), MYSQL_TYPE_LONG},
+					&RowsEventValue{10, false, uint32(26), MYSQL_TYPE_LONG},
+					&RowsEventValue{11, false, uint64(27), MYSQL_TYPE_LONGLONG},
+					&RowsEventValue{12, false, uint64(28), MYSQL_TYPE_LONGLONG},
+					&RowsEventValue{13, false, rat29, MYSQL_TYPE_NEWDECIMAL},
+					&RowsEventValue{14, false, rat30, MYSQL_TYPE_NEWDECIMAL},
+					&RowsEventValue{15, true, nil, MYSQL_TYPE_DOUBLE},
+					&RowsEventValue{16, false, 31.0, MYSQL_TYPE_DOUBLE},
+					&RowsEventValue{17, false, float32(32), MYSQL_TYPE_FLOAT},
+					&RowsEventValue{18, false, float32(33), MYSQL_TYPE_FLOAT},
 				},
 			},
 		},
@@ -1085,35 +1081,35 @@ func TestWriteRowsEventV1(t *testing.T) {
 			for j, expectedValue := range expectedValueRow {
 				resultValue := write.values[k][j]
 
-				if expectedValue.Type != resultValue.Type {
+				if expectedValue.GetType() != resultValue.GetType() {
 					t.Fatal(
 						"Incorrect type at test", i, "row", k, "value id", j,
-						"expected", expectedValue.Type,
-						"got", resultValue.Type,
+						"expected", expectedValue.GetType(),
+						"got", resultValue.GetType(),
 					)
 				}
 
-				if expectedValue.ColumnId != resultValue.ColumnId {
+				if expectedValue.GetColumnId() != resultValue.GetColumnId() {
 					t.Fatal(
 						"Incorrect column id at test", i, "row", k, "value id", j,
-						"expected", expectedValue.ColumnId,
-						"got", resultValue.ColumnId,
+						"expected", expectedValue.GetColumnId(),
+						"got", resultValue.GetColumnId(),
 					)
 				}
 
-				if expectedValue.IsNull != resultValue.IsNull {
+				if expectedValue.IsNil() != resultValue.IsNil() {
 					t.Fatal(
 						"Incorrect null value at test", i, "row", k, "value id", j,
-						"expected", expectedValue.IsNull,
-						"got", resultValue.IsNull,
+						"expected", expectedValue.IsNil(),
+						"got", resultValue.IsNil(),
 					)
 				}
 
-				if !reflect.DeepEqual(expectedValue.Value, resultValue.Value) {
+				if !reflect.DeepEqual(expectedValue.GetValue(), resultValue.GetValue()) {
 					t.Fatal(
 						"Incorrect value at test", i, "row", k, "value id", j,
-						"expected", expectedValue.Value,
-						"got", resultValue.Value,
+						"expected", expectedValue.GetValue(),
+						"got", resultValue.GetValue(),
 					)
 				}
 			}
@@ -1139,8 +1135,8 @@ func TestDeleteRowsEventV1(t *testing.T) {
 			},
 			expectedValues: [][]*RowsEventValue{
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(6), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, rat333, _MYSQL_TYPE_NEWDECIMAL, ""},
+					&RowsEventValue{0, false, uint32(6), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, rat333, MYSQL_TYPE_NEWDECIMAL},
 				},
 			},
 		},
@@ -1161,19 +1157,19 @@ func TestDeleteRowsEventV1(t *testing.T) {
 			},
 			expectedValues: [][]*RowsEventValue{
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(13), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hi", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, true, nil, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(13), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hi", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, true, nil, MYSQL_TYPE_DOUBLE},
 				},
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(14), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hi", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, true, nil, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(14), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hi", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, true, nil, MYSQL_TYPE_DOUBLE},
 				},
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(15), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hello", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, false, 22.0, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(15), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hello", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, false, 22.0, MYSQL_TYPE_DOUBLE},
 				},
 			},
 		},
@@ -1214,35 +1210,35 @@ func TestDeleteRowsEventV1(t *testing.T) {
 			for j, expectedValue := range expectedValueRow {
 				resultValue := delete.values[k][j]
 
-				if expectedValue.Type != resultValue.Type {
+				if expectedValue.GetType() != resultValue.GetType() {
 					t.Fatal(
 						"Incorrect type at test", i, "row", k, "value id", j,
-						"expected", expectedValue.Type,
-						"got", resultValue.Type,
+						"expected", expectedValue.GetType(),
+						"got", resultValue.GetType(),
 					)
 				}
 
-				if expectedValue.ColumnId != resultValue.ColumnId {
+				if expectedValue.GetColumnId() != resultValue.GetColumnId() {
 					t.Fatal(
 						"Incorrect column id at test", i, "row", k, "value id", j,
-						"expected", expectedValue.ColumnId,
-						"got", resultValue.ColumnId,
+						"expected", expectedValue.GetColumnId(),
+						"got", resultValue.GetColumnId(),
 					)
 				}
 
-				if expectedValue.IsNull != resultValue.IsNull {
+				if expectedValue.IsNil() != resultValue.IsNil() {
 					t.Fatal(
 						"Incorrect null value at test", i, "row", k, "value id", j,
-						"expected", expectedValue.IsNull,
-						"got", resultValue.IsNull,
+						"expected", expectedValue.IsNil(),
+						"got", resultValue.IsNil(),
 					)
 				}
 
-				if !reflect.DeepEqual(expectedValue.Value, resultValue.Value) {
+				if !reflect.DeepEqual(expectedValue.GetValue(), resultValue.GetValue()) {
 					t.Fatal(
 						"Incorrect value at test", i, "row", k, "value id", j,
-						"expected", expectedValue.Value,
-						"got", resultValue.Value,
+						"expected", expectedValue.GetValue(),
+						"got", resultValue.GetValue(),
 					)
 				}
 			}
@@ -1330,36 +1326,36 @@ func TestUpdateRowsEventV1(t *testing.T) {
 			},
 			expectedValues: [][]*RowsEventValue{
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(10), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hi", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, false, 3.14, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(10), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hi", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, false, 3.14, MYSQL_TYPE_DOUBLE},
 				},
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(11), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hi", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, false, 3.14, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(11), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hi", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, false, 3.14, MYSQL_TYPE_DOUBLE},
 				},
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(12), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hi", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, false, 3.14, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(12), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hi", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, false, 3.14, MYSQL_TYPE_DOUBLE},
 				},
 			},
 			expectedNewValues: [][]*RowsEventValue{
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(10), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hello", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, false, 3.14, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(10), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hello", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, false, 3.14, MYSQL_TYPE_DOUBLE},
 				},
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(11), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hello", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, false, 3.14, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(11), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hello", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, false, 3.14, MYSQL_TYPE_DOUBLE},
 				},
 				[]*RowsEventValue{
-					&RowsEventValue{0, false, uint32(12), _MYSQL_TYPE_LONG, ""},
-					&RowsEventValue{1, false, "hello", _MYSQL_TYPE_VARCHAR, ""},
-					&RowsEventValue{2, false, 3.14, _MYSQL_TYPE_DOUBLE, ""},
+					&RowsEventValue{0, false, uint32(12), MYSQL_TYPE_LONG},
+					&RowsEventValue{1, false, "hello", MYSQL_TYPE_VARCHAR},
+					&RowsEventValue{2, false, 3.14, MYSQL_TYPE_DOUBLE},
 				},
 			},
 		},
@@ -1408,35 +1404,35 @@ func TestUpdateRowsEventV1(t *testing.T) {
 			for j, expectedValue := range expectedValueRow {
 				resultValue := update.values[k][j]
 
-				if expectedValue.Type != resultValue.Type {
+				if expectedValue.GetType() != resultValue.GetType() {
 					t.Fatal(
 						"Incorrect type at test old values ", i, "row", k, "value id", j,
-						"expected", expectedValue.Type,
-						"got", resultValue.Type,
+						"expected", expectedValue.GetType(),
+						"got", resultValue.GetType(),
 					)
 				}
 
-				if expectedValue.ColumnId != resultValue.ColumnId {
+				if expectedValue.GetColumnId() != resultValue.GetColumnId() {
 					t.Fatal(
 						"Incorrect column id at test old values ", i, "row", k, "value id", j,
-						"expected", expectedValue.ColumnId,
-						"got", resultValue.ColumnId,
+						"expected", expectedValue.GetColumnId(),
+						"got", resultValue.GetColumnId(),
 					)
 				}
 
-				if expectedValue.IsNull != resultValue.IsNull {
+				if expectedValue.IsNil() != resultValue.IsNil() {
 					t.Fatal(
 						"Incorrect null value at test old values ", i, "row", k, "value id", j,
-						"expected", expectedValue.IsNull,
-						"got", resultValue.IsNull,
+						"expected", expectedValue.IsNil(),
+						"got", resultValue.IsNil(),
 					)
 				}
 
-				if !reflect.DeepEqual(expectedValue.Value, resultValue.Value) {
+				if !reflect.DeepEqual(expectedValue.GetValue(), resultValue.GetValue()) {
 					t.Fatal(
 						"Incorrect value at test old values ", i, "row", k, "value id", j,
-						"expected", expectedValue.Value,
-						"got", resultValue.Value,
+						"expected", expectedValue.GetValue(),
+						"got", resultValue.GetValue(),
 					)
 				}
 			}
@@ -1447,35 +1443,35 @@ func TestUpdateRowsEventV1(t *testing.T) {
 			for j, expectedValue := range expectedValueRow {
 				resultValue := update.newValues[k][j]
 
-				if expectedValue.Type != resultValue.Type {
+				if expectedValue.GetType() != resultValue.GetType() {
 					t.Fatal(
 						"Incorrect type at test new values ", i, "row", k, "value id", j,
-						"expected", expectedValue.Type,
-						"got", resultValue.Type,
+						"expected", expectedValue.GetType(),
+						"got", resultValue.GetType(),
 					)
 				}
 
-				if expectedValue.ColumnId != resultValue.ColumnId {
+				if expectedValue.GetColumnId() != resultValue.GetColumnId() {
 					t.Fatal(
 						"Incorrect column id at test new values ", i, "row", k, "value id", j,
-						"expected", expectedValue.ColumnId,
-						"got", resultValue.ColumnId,
+						"expected", expectedValue.GetColumnId(),
+						"got", resultValue.GetColumnId(),
 					)
 				}
 
-				if expectedValue.IsNull != resultValue.IsNull {
+				if expectedValue.IsNil() != resultValue.IsNil() {
 					t.Fatal(
 						"Incorrect null value at test new values ", i, "row", k, "value id", j,
-						"expected", expectedValue.IsNull,
-						"got", resultValue.IsNull,
+						"expected", expectedValue.IsNil(),
+						"got", resultValue.IsNil(),
 					)
 				}
 
-				if !reflect.DeepEqual(expectedValue.Value, resultValue.Value) {
+				if !reflect.DeepEqual(expectedValue.GetValue(), resultValue.GetValue()) {
 					t.Fatal(
 						"Incorrect value at test new values ", i, "row", k, "value id", j,
-						"expected", expectedValue.Value,
-						"got", resultValue.Value,
+						"expected", expectedValue.GetValue(),
+						"got", resultValue.GetValue(),
 					)
 				}
 			}

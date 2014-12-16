@@ -19,7 +19,7 @@ type (
 	}
 )
 
-func newConnection() *connection {
+func NewConnection() *connection {
 	return &connection{
 		conn: nil,
 	}
@@ -76,7 +76,7 @@ func (c *connection) init(username, password string) (err error) {
 	return pack.isError()
 }
 
-func (c *connection) getMasterStatus() (pos uint32, filename string, err error) {
+func (c *connection) GetMasterStatus() (pos uint32, filename string, err error) {
 	rs, err := c.query("SHOW MASTER STATUS")
 	if err != nil {
 		return
@@ -166,7 +166,7 @@ func (c *connection) fieldList(db, table string) (*resultSet, error) {
 	return rs, nil
 }
 
-func (c *connection) startBinlogDump(position uint32, fileName string, serverId uint32) (el *eventLog, err error) {
+func (c *connection) StartBinlogDump(position uint32, fileName string, serverId uint32) (el *eventLog, err error) {
 	register := &registerSlave{}
 	pack := register.writeServer(serverId)
 	err = c.packWriter.flush(pack)

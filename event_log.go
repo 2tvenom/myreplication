@@ -1,8 +1,6 @@
 package mysql_replication_listener
 
 import (
-	"fmt"
-	"io"
 	"math"
 )
 
@@ -19,9 +17,9 @@ type (
 		headerUpdateRowsEventV1Length byte
 		headerWriteRowsEventV1Length  byte
 
-		tableColumns map[string]map[string][]*columnSet
-
 		lastTableMapEvent *TableMapEvent
+
+		eventChan chan interface{}
 	}
 
 	eventLogHeader struct {
@@ -56,12 +54,12 @@ type (
 
 	QueryEvent struct {
 		*eventLogHeader
-		SlaveProxyId  uint32
-		ExecutionTime uint32
-		ErrorCode     uint16
-		StatusVars    []byte
-		Schema        string
-		Query         string
+		slaveProxyId  uint32
+		executionTime uint32
+		errorCode     uint16
+		statusVars    []byte
+		schema        string
+		query         string
 		binLogVersion uint16
 	}
 
@@ -72,38 +70,38 @@ type (
 
 	IntVarEvent struct {
 		*eventLogHeader
-		Type  byte
-		Value uint64
+		_type byte
+		value uint64
 	}
 
 	BeginLoadQueryEvent struct {
 		*eventLogHeader
-		FileId    uint32
-		BlockData string
+		fileId    uint32
+		blockData string
 	}
 
 	ExecuteLoadQueryEvent struct {
 		*eventLogHeader
-		SlaveProxyId     uint32
-		ExecutionTime    uint32
-		ErrorCode        uint16
-		StatusVars       []byte
-		Schema           string
-		FileId           uint32
-		StartPos         uint32
-		EndPos           uint32
-		DupHandlingFlags byte
-		Query            string
+		slaveProxyId     uint32
+		executionTime    uint32
+		errorCode        uint16
+		statusVars       []byte
+		schema           string
+		fileId           uint32
+		startPos         uint32
+		endPos           uint32
+		dupHandlingFlags byte
+		query            string
 	}
 
 	UserVarEvent struct {
 		*eventLogHeader
-		Name    string
-		IsNil   bool
-		Type    byte
-		Charset uint32
-		Value   string
-		Flags   byte
+		name    string
+		isNil   bool
+		_type    byte
+		charset uint32
+		value   string
+		flags   byte
 	}
 
 	IncidentEvent struct {
@@ -114,8 +112,8 @@ type (
 
 	RandEvent struct {
 		*eventLogHeader
-		Seed1 uint64
-		Seed2 uint64
+		seed1 uint64
+		seed2 uint64
 	}
 
 	TableMapEvent struct {
@@ -131,8 +129,6 @@ type (
 		Type     byte
 		MetaInfo []byte
 		Nullable bool
-		Unsigned bool
-		Name     string
 	}
 
 	rowsEvent struct {
@@ -149,11 +145,22 @@ type (
 	}
 
 	RowsEventValue struct {
-		ColumnId int
-		IsNull   bool
-		Value    interface{}
-		Type     byte
-		Name     string
+		columnId int
+		isNull   bool
+		value    interface{}
+		_type     byte
+	}
+
+	DeleteEvent struct {
+		*rowsEvent
+	}
+
+	WriteEvent struct {
+		*rowsEvent
+	}
+
+	UpdateEvent struct {
+		*rowsEvent
 	}
 
 	unknownEvent struct {
@@ -184,6 +191,38 @@ type (
 		*unknownEvent
 	}
 )
+
+func (event *RowsEventValue) GetType() byte {
+	return event._type
+}
+
+func (event *RowsEventValue) GetValue() interface {} {
+	return event.value
+}
+
+func (event *RowsEventValue) IsNil() bool {
+	return event.isNull
+}
+
+func (event *RowsEventValue) GetColumnId() int {
+	return event.columnId
+}
+
+func (event *rowsEvent) GetSchema() string {
+	return event.tableMapEvent.SchemaName
+}
+
+func (event *rowsEvent) GetTable() string {
+	return event.tableMapEvent.TableName
+}
+
+func (event *rowsEvent) GetRows() [][]*RowsEventValue {
+	return event.values
+}
+
+func (event *UpdateEvent) GetNewRows() [][]*RowsEventValue {
+	return event.newValues
+}
 
 func isTrue(columnId int, bitmap []byte) bool {
 	return (bitmap[columnId/8]>>uint8(columnId%8))&1 == 1
@@ -247,73 +286,55 @@ func (event *rowsEvent) read(pack *pack) {
 			}
 
 			value := &RowsEventValue{
-				ColumnId: i,
-				Type:     column.Type,
-				Name:     column.Name,
+				columnId: i,
+				_type:     column.Type,
 			}
 
 			if isTrue(i, nullBitmap) {
-				value.Value = nil
-				value.IsNull = true
+				value.value = nil
+				value.isNull = true
 			} else {
 				switch column.Type {
-				case _MYSQL_TYPE_ENUM,
-					_MYSQL_TYPE_SET, _MYSQL_TYPE_LONG_BLOB, _MYSQL_TYPE_MEDIUM_BLOB, _MYSQL_TYPE_BLOB,
-					_MYSQL_TYPE_TINY_BLOB, _MYSQL_TYPE_GEOMETRY, _MYSQL_TYPE_BIT:
-					value.Value, _ = pack.readStringLength()
-				case _MYSQL_TYPE_STRING, _MYSQL_TYPE_VARCHAR, _MYSQL_TYPE_VAR_STRING:
+				case MYSQL_TYPE_ENUM,
+					MYSQL_TYPE_SET, MYSQL_TYPE_LONG_BLOB, MYSQL_TYPE_MEDIUM_BLOB, MYSQL_TYPE_BLOB,
+					MYSQL_TYPE_TINY_BLOB, MYSQL_TYPE_GEOMETRY, MYSQL_TYPE_BIT:
+					value.value, _ = pack.readStringLength()
+				case MYSQL_TYPE_STRING, MYSQL_TYPE_VARCHAR, MYSQL_TYPE_VAR_STRING:
 					val, _ := pack.readStringLength()
-					value.Value = string(val)
-				case _MYSQL_TYPE_DECIMAL, _MYSQL_TYPE_NEWDECIMAL:
-					value.Value = pack.readNewDecimal(int(column.MetaInfo[0]), int(column.MetaInfo[1]))
-				case _MYSQL_TYPE_LONGLONG:
+					value.value = string(val)
+				case MYSQL_TYPE_DECIMAL, MYSQL_TYPE_NEWDECIMAL:
+					value.value = pack.readNewDecimal(int(column.MetaInfo[0]), int(column.MetaInfo[1]))
+				case MYSQL_TYPE_LONGLONG:
 					var val uint64
 					pack.readUint64(&val)
-					if column.Unsigned {
-						value.Value = val
-					} else {
-						value.Value = int64(val)
-					}
+					value.value = val
 
-				case _MYSQL_TYPE_LONG:
+				case MYSQL_TYPE_LONG:
 					var val uint32
 					pack.readUint32(&val)
-					if column.Unsigned {
-						value.Value = val
-					} else {
-						value.Value = int32(val)
-					}
-				case _MYSQL_TYPE_INT24:
+					value.value = val
+				case MYSQL_TYPE_INT24:
 					var val uint32
 					pack.readThreeByteUint32(&val)
-					if column.Unsigned {
-						value.Value = val
-					} else {
-						value.Value = int32(val)
-					}
-
-				case _MYSQL_TYPE_SHORT, _MYSQL_TYPE_YEAR:
+					value.value = val
+				case MYSQL_TYPE_SHORT, MYSQL_TYPE_YEAR:
 					var val uint16
 					pack.readUint16(&val)
-					if column.Unsigned {
-						value.Value = val
-					} else {
-						value.Value = int16(val)
-					}
-				case _MYSQL_TYPE_TINY:
-					value.Value, _ = pack.ReadByte()
-				case _MYSQL_TYPE_FLOAT:
+					value.value = val
+				case MYSQL_TYPE_TINY:
+					value.value, _ = pack.ReadByte()
+				case MYSQL_TYPE_FLOAT:
 					var val uint32
 					pack.readUint32(&val)
-					value.Value = float32(math.Float32frombits(val))
-				case _MYSQL_TYPE_DOUBLE:
+					value.value = float32(math.Float32frombits(val))
+				case MYSQL_TYPE_DOUBLE:
 					var val uint64
 					pack.readUint64(&val)
-					value.Value = math.Float64frombits(val)
-				case _MYSQL_TYPE_DATE, _MYSQL_TYPE_DATETIME, _MYSQL_TYPE_TIMESTAMP:
-					value.Value = pack.readDateTime()
-				case _MYSQL_TYPE_TIME:
-					value.Value = pack.readTime()
+					value.value = math.Float64frombits(val)
+				case MYSQL_TYPE_DATE, MYSQL_TYPE_DATETIME, MYSQL_TYPE_TIMESTAMP:
+					value.value = pack.readDateTime()
+				case MYSQL_TYPE_TIME:
+					value.value = pack.readTime()
 				}
 			}
 			row = append(row, value)
@@ -372,11 +393,11 @@ func (event *TableMapEvent) read(pack *pack) {
 		}
 
 		switch columnTypeDef[i] {
-		case _MYSQL_TYPE_STRING, _MYSQL_TYPE_VAR_STRING, _MYSQL_TYPE_VARCHAR, _MYSQL_TYPE_DECIMAL,
-			_MYSQL_TYPE_NEWDECIMAL, _MYSQL_TYPE_ENUM, _MYSQL_TYPE_SET:
+		case MYSQL_TYPE_STRING, MYSQL_TYPE_VAR_STRING, MYSQL_TYPE_VARCHAR, MYSQL_TYPE_DECIMAL,
+			MYSQL_TYPE_NEWDECIMAL, MYSQL_TYPE_ENUM, MYSQL_TYPE_SET:
 			column.MetaInfo = columnMetaDef[metaOffset : metaOffset+2]
 			metaOffset += 2
-		case _MYSQL_TYPE_BLOB, _MYSQL_TYPE_DOUBLE, _MYSQL_TYPE_FLOAT:
+		case MYSQL_TYPE_BLOB, MYSQL_TYPE_DOUBLE, MYSQL_TYPE_FLOAT:
 			column.MetaInfo = columnMetaDef[metaOffset : metaOffset+1]
 			metaOffset += 1
 		default:
@@ -387,9 +408,17 @@ func (event *TableMapEvent) read(pack *pack) {
 	}
 }
 
+func (event *RandEvent) GetSeed1() uint64 {
+	return event.seed1
+}
+
+func (event *RandEvent) GetSeed2() uint64 {
+	return event.seed2
+}
+
 func (event *RandEvent) read(pack *pack) {
-	pack.readUint64(&event.Seed1)
-	pack.readUint64(&event.Seed2)
+	pack.readUint64(&event.seed1)
+	pack.readUint64(&event.seed2)
 }
 
 func (event *IncidentEvent) read(pack *pack) {
@@ -402,42 +431,78 @@ func (event *unknownEvent) read(pack *pack) {
 
 }
 
+func (event *UserVarEvent) GetName() string {
+	return event.name
+}
+
+func (event *UserVarEvent) GetType() byte {
+	return event._type
+}
+
+func (event *UserVarEvent) IsNil() bool {
+	return event.isNil
+}
+
+func (event *UserVarEvent) GetCharset() uint32 {
+	return event.charset
+}
+
+func (event *UserVarEvent) GetValue() string {
+	return event.value
+}
+
 func (event *UserVarEvent) read(pack *pack) {
 	var nameLength uint32
 	pack.readUint32(&nameLength)
-	event.Name = string(pack.Next(int(nameLength)))
+	event.name = string(pack.Next(int(nameLength)))
 	isNull, _ := pack.ReadByte()
-	event.IsNil = isNull == 1
-	if event.IsNil {
+	event.isNil = isNull == 1
+	if event.isNil {
 		return
 	}
 
-	event.Type, _ = pack.ReadByte()
-	pack.readUint32(&event.Charset)
+	event._type, _ = pack.ReadByte()
+	pack.readUint32(&event.charset)
 	var length uint32
 	pack.readUint32(&length)
-	event.Value = string(pack.Next(int(length)))
-	event.Flags, _ = pack.ReadByte()
+	event.value = string(pack.Next(int(length)))
+	event.flags, _ = pack.ReadByte()
+}
+
+func (event *ExecuteLoadQueryEvent) GetSchema() string {
+	return event.schema
+}
+
+func (event *ExecuteLoadQueryEvent) GetQuery() string {
+	return event.query
+}
+
+func (event *ExecuteLoadQueryEvent) GetExecutionTime() uint32 {
+	return event.executionTime
+}
+
+func (event *ExecuteLoadQueryEvent) GetErrorCode() uint16 {
+	return event.errorCode
 }
 
 func (event *ExecuteLoadQueryEvent) read(pack *pack) {
-	pack.readUint32(&event.SlaveProxyId)
-	pack.readUint32(&event.ExecutionTime)
+	pack.readUint32(&event.slaveProxyId)
+	pack.readUint32(&event.executionTime)
 
 	schemaLength, _ := pack.ReadByte()
 
-	pack.readUint16(&event.ErrorCode)
+	pack.readUint16(&event.errorCode)
 
 	var statusVarsLength uint16
 	pack.readUint16(&statusVarsLength)
 
-	pack.readUint32(&event.FileId)
-	pack.readUint32(&event.StartPos)
-	pack.readUint32(&event.EndPos)
-	event.DupHandlingFlags, _ = pack.ReadByte()
+	pack.readUint32(&event.fileId)
+	pack.readUint32(&event.startPos)
+	pack.readUint32(&event.endPos)
+	event.dupHandlingFlags, _ = pack.ReadByte()
 
-	event.StatusVars = pack.Next(int(statusVarsLength))
-	event.Schema = string(pack.Next(int(schemaLength)))
+	event.statusVars = pack.Next(int(statusVarsLength))
+	event.schema = string(pack.Next(int(schemaLength)))
 
 	splitter, _ := pack.ReadByte()
 
@@ -445,38 +510,66 @@ func (event *ExecuteLoadQueryEvent) read(pack *pack) {
 		panic("Incorrect binlog EXECUTE_LOAD_QUERY_EVENT structure")
 	}
 
-	event.Query = string(pack.Bytes())
+	event.query = string(pack.Bytes())
+}
+
+func (event *BeginLoadQueryEvent) GetData() string {
+	return event.blockData
 }
 
 func (event *BeginLoadQueryEvent) read(pack *pack) {
-	pack.readUint32(&event.FileId)
-	event.BlockData = string(pack.Bytes())
+	pack.readUint32(&event.fileId)
+	event.blockData = string(pack.Bytes())
+}
+
+func (event *IntVarEvent) GetValue() uint64 {
+	return event.value
+}
+
+func (event *IntVarEvent) GetType() byte {
+	return event._type
 }
 
 func (event *IntVarEvent) read(pack *pack) {
-	event.Type, _ = pack.ReadByte()
-	pack.readUint64(&event.Value)
+	event._type, _ = pack.ReadByte()
+	pack.readUint64(&event.value)
 }
 
 func (event *XidEvent) read(pack *pack) {
 	pack.readUint64(&event.TransactionId)
 }
 
+func (event *QueryEvent) GetQuery() string {
+	return event.query
+}
+
+func (event *QueryEvent) GetExecutionTime() uint32 {
+	return event.executionTime
+}
+
+func (event *QueryEvent) GetErrorCode() uint16 {
+	return event.errorCode
+}
+
+func (event *QueryEvent) GetSchema() string {
+	return event.schema
+}
+
 func (event *QueryEvent) read(pack *pack) {
-	pack.readUint32(&event.SlaveProxyId)
-	pack.readUint32(&event.ExecutionTime)
+	pack.readUint32(&event.slaveProxyId)
+	pack.readUint32(&event.executionTime)
 
 	schemaLength, _ := pack.ReadByte()
 
-	pack.readUint16(&event.ErrorCode)
+	pack.readUint16(&event.errorCode)
 
 	if event.binLogVersion >= 4 {
 		var statusVarsLength uint16
 		pack.readUint16(&statusVarsLength)
-		event.StatusVars = pack.Next(int(statusVarsLength))
+		event.statusVars = pack.Next(int(statusVarsLength))
 	}
 
-	event.Schema = string(pack.Next(int(schemaLength)))
+	event.schema = string(pack.Next(int(schemaLength)))
 
 	splitter, _ := pack.ReadByte()
 
@@ -484,7 +577,7 @@ func (event *QueryEvent) read(pack *pack) {
 		panic("Incorrect binlog QUERY_EVENT structure")
 	}
 
-	event.Query = string(pack.Bytes())
+	event.query = string(pack.Bytes())
 }
 
 func (event *logRotateEvent) read(pack *pack) {
@@ -521,36 +614,27 @@ func (eh *eventLogHeader) readHead(pack *pack) {
 func newEventLog(mysqlConnection *connection) *eventLog {
 	return &eventLog{
 		mysqlConnection: mysqlConnection,
-		tableColumns:    map[string]map[string][]*columnSet{},
+		eventChan:       make(chan interface{}),
 	}
 }
 
-func (ev *eventLog) getColumnSet(db, table string) ([]*columnSet, error) {
-	if _, ok := ev.tableColumns[db]; !ok {
-		ev.tableColumns[db] = map[string][]*columnSet{}
-	}
-
-	if _, ok := ev.tableColumns[db][table]; !ok {
-		rs, err := ev.mysqlConnection.fieldList(db, table)
-
-		if err != nil {
-			return nil, err
-		}
-
-		ev.tableColumns[db][table] = rs.columns
-	}
-
-	return ev.tableColumns[db][table], nil
+func (ev *eventLog) GetLastPosition() uint32 {
+	return ev.lastRotatePosition
 }
 
-func (ev *eventLog) start() {
+func (ev *eventLog) GetLastLogFileName() string {
+	return string(ev.lastRotateFileName)
+}
+
+func (ev *eventLog) GetEventChan() <-chan interface{} {
+	return ev.eventChan
+}
+
+func (ev *eventLog) Start() error {
 	for {
 		event, err := ev.readEvent()
 		if err != nil {
-			if err == io.EOF {
-				println("EOF")
-				break
-			}
+			return err
 		}
 
 		switch e := event.(type) {
@@ -571,75 +655,61 @@ func (ev *eventLog) start() {
 			}
 		case *logRotateEvent:
 			ev.lastRotateFileName = e.binlogFileName
-			println("rotate", e.position, string(e.binlogFileName))
 		case *QueryEvent:
-			println(e.Query)
-			//redirect to chan
+			ev.eventChan <- e
 		case *XidEvent:
-			println(e.TransactionId)
-			//redirect to chan
+			continue
 		case *IntVarEvent:
-			println(e.Type)
-			println(e.Value)
-			//redirect to chan
+			ev.eventChan <- e
 		case *BeginLoadQueryEvent:
-			println(e.BlockData)
-			//redirect to chan
+			ev.eventChan <- e
 		case *AppendBlockEvent:
-			println(e.BlockData)
-			//redirect to chan
+			ev.eventChan <- e
 		case *ExecuteLoadQueryEvent:
-			println(e.Query)
-			//redirect to chan
+			ev.eventChan <- e
 		case *UserVarEvent:
-			println(e.Name, "=", e.Value)
-			//redirect to chan
-		case *StopEvent:
-			//redirect to chan
-			println("stop")
-		case *IncidentEvent:
-			//redirect to chan
-			println("incident")
+			ev.eventChan <- e
 		case *RandEvent:
-			//redirect to chan
-			println("rand")
+			ev.eventChan <- e
 		case *TableMapEvent:
-			println("Table map event")
 			ev.lastTableMapEvent = e
-			columnSet, err := ev.getColumnSet(e.SchemaName, e.TableName)
-fmt.Printf("%v\n", columnSet)
-			if err != nil {
-				println("Column set error", err)
-				break
-			}
-
-			for i, column := range columnSet {
-				ev.lastTableMapEvent.Columns[i].Unsigned = column.flags&
-					MYSQL_FLAG_COLUMN_UNSIGNED == MYSQL_FLAG_COLUMN_UNSIGNED
-				ev.lastTableMapEvent.Columns[i].Name = string(column.org_name)
-				println(i, ev.lastTableMapEvent.Columns[i].Name)
-			}
-
 		case *rowsEvent:
-			println("row event")
-			for i, row := range e.values {
-				for j, col := range row {
-					fmt.Printf("%d %d - %s %v %b", i, j, col.Name, col.Value, e.tableMapEvent.Columns[i].Unsigned)
-				}
+			switch e.EventType {
+			case _DELETE_ROWS_EVENTv0:
+				fallthrough
+			case _DELETE_ROWS_EVENTv1:
+				fallthrough
+			case _DELETE_ROWS_EVENTv2:
+				ev.eventChan <- &DeleteEvent{e}
+			case _UPDATE_ROWS_EVENTv0:
+				fallthrough
+			case _UPDATE_ROWS_EVENTv1:
+				fallthrough
+			case _UPDATE_ROWS_EVENTv2:
+				ev.eventChan <- &UpdateEvent{e}
+			case _WRITE_ROWS_EVENTv0:
+				fallthrough
+			case _WRITE_ROWS_EVENTv1:
+				fallthrough
+			case _WRITE_ROWS_EVENTv2:
+				ev.eventChan <- &WriteEvent{e}
 			}
+
 			////////// trash events
 		case *slaveEvent:
-			println("slave")
-			//no action
+			continue
 		case *unknownEvent:
-			println("unknows")
-			//no action
+			continue
 		case *ignorableEvent:
-			println("ignorable")
-			//no action
+			continue
 		case *HeartBeatEvent:
-			println("heartbeat")
-			//no action
+			continue
+		case *StopEvent:
+			continue
+		case *IncidentEvent:
+			continue
+		default:
+			continue
 		}
 	}
 }
@@ -687,7 +757,7 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 			eventLogHeader: header,
 		}
 	case _APPEND_BLOCK_EVENT:
-		event = &AppendBlockEvent {
+		event = &AppendBlockEvent{
 			&BeginLoadQueryEvent{
 				eventLogHeader: header,
 			},
@@ -706,19 +776,19 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 		}
 	case _IGNORABLE_EVENT:
 		event = &ignorableEvent{
-			&unknownEvent {
+			&unknownEvent{
 				eventLogHeader: header,
 			},
 		}
 	case _HEARTBEAT_EVENT:
 		event = &HeartBeatEvent{
-			&unknownEvent {
+			&unknownEvent{
 				eventLogHeader: header,
 			},
 		}
 	case _STOP_EVENT:
 		event = &StopEvent{
-			&unknownEvent {
+			&unknownEvent{
 				eventLogHeader: header,
 			},
 		}
@@ -728,7 +798,7 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 		}
 	case _SLAVE_EVENT:
 		event = &slaveEvent{
-			&unknownEvent {
+			&unknownEvent{
 				eventLogHeader: header,
 			},
 		}
@@ -758,20 +828,19 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 		fallthrough
 	case _WRITE_ROWS_EVENTv2:
 		event = &rowsEvent{
-			eventLogHeader: header,
-			version: byte(ev.binlogVersion),
+			eventLogHeader:   header,
+			version:          byte(ev.binlogVersion),
 			postHeaderLength: ev.headerWriteRowsEventV1Length,
-			tableMapEvent: ev.lastTableMapEvent,
+			tableMapEvent:    ev.lastTableMapEvent,
 		}
 	default:
-		println("Unknown event")
-		println(fmt.Sprintf("% x\n", pack.buff))
-		return nil, nil
+		//		println("Unknown event")
+		//		println(fmt.Sprintf("% x\n", pack.buff))
+		//		return nil, nil
 	}
 
 	ev.lastRotatePosition = header.NextPosition
 	event.read(pack)
-
 
 	return event, nil
 }
