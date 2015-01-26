@@ -7,9 +7,9 @@ import (
 
 var (
 	host     = "localhost"
-	port     = 3306
-	username = "root"
-	password = ""
+	port     = 3307
+	username = "admin"
+	password = "admin"
 )
 
 func main() {
@@ -31,9 +31,8 @@ func main() {
 	if err != nil {
 		panic("Cant start bin log: " + err.Error())
 	}
-
+	events := el.GetEventChan()
 	go func () {
-		events := el.GetEventChan()
 		for {
 			event := <- events
 
@@ -65,6 +64,6 @@ func main() {
 			}
 		}
 	}()
-	err 1= el.Start()
+	err = el.Start()
 	println(err.Error())
 }

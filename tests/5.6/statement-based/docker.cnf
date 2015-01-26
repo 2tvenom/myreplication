@@ -1,0 +1,4 @@
+[mysqld]
+server-id = 1
+log_bin = /var/lib/mysql/mysql-bin.log
+binlog_do_db = test

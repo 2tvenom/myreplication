@@ -2,6 +2,7 @@ package mysql_replication_listener
 
 import (
 	"math"
+	"fmt"
 )
 
 type (
@@ -633,6 +634,7 @@ func (ev *eventLog) GetEventChan() <-chan interface{} {
 func (ev *eventLog) Start() error {
 	for {
 		event, err := ev.readEvent()
+
 		if err != nil {
 			return err
 		}
@@ -723,6 +725,12 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 
 	header := &eventLogHeader{}
 	header.readHead(pack)
+
+	err = pack.isError()
+
+	if err != nil {
+		return nil, err
+	}
 
 	var event binLogEvent
 
@@ -834,9 +842,9 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 			tableMapEvent:    ev.lastTableMapEvent,
 		}
 	default:
-		//		println("Unknown event")
-		//		println(fmt.Sprintf("% x\n", pack.buff))
-		//		return nil, nil
+		println("Unknown event")
+		println(fmt.Sprintf("% x\n", pack.buff))
+		return nil, nil
 	}
 
 	ev.lastRotatePosition = header.NextPosition
