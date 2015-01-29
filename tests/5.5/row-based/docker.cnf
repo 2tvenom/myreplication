@@ -1,0 +1,7 @@
+[mysqld]
+user = mysql
+datadir = /var/lib/mysql
+server-id = 1
+log_bin = /var/lib/mysql/mysql-bin.log
+binlog_do_db = test
+binlog-format = row

@@ -19,10 +19,18 @@ type (
 	}
 )
 
+const (
+	_DEFAULT_DB = "information_schema"
+)
+
 func NewConnection() *connection {
 	return &connection{
 		conn: nil,
 	}
+}
+
+func (c *connection) Connection() net.Conn {
+	return c.conn
 }
 
 func (c *connection) ConnectAndAuth(host string, port int, username, password string) error {
@@ -104,6 +112,53 @@ func (c *connection) GetMasterStatus() (pos uint32, filename string, err error) 
 	return
 }
 
+func (c *connection) ChecksumCompatibility() (ok bool, err error) {
+	err = c.initDb(_DEFAULT_DB)
+	if err != nil {
+		return
+	}
+	rs, err := c.query("SHOW GLOBAL VARIABLES LIKE 'BINLOG_CHECKSUM'")
+
+	if err != nil {
+		return
+	}
+
+	pack, err := rs.nextRow()
+	if err != nil {
+		if err == EOF_ERR {
+			return false, nil
+		}
+		return
+	}
+
+	pack.readStringLength()
+	_type, _ := pack.readStringLength()
+	rs.nextRow()
+
+	if len(_type) == 0 {
+		return
+	}
+	ok = true
+	_, err = c.query("set @master_binlog_checksum = @@global.binlog_checksum")
+	return
+}
+
+func (c *connection) initDb(schemaName string) error {
+	q := &initDb{}
+	pack := q.writeServer(schemaName)
+	err := c.packWriter.flush(pack)
+	if err != nil {
+		return err
+	}
+
+	pack, err = c.packReader.readNextPack()
+	if err != nil {
+		return err
+	}
+
+	return pack.isError()
+}
+
 func (c *connection) query(command string) (*resultSet, error) {
 	q := &query{}
 	pack := q.writeServer(command)
@@ -167,6 +222,11 @@ func (c *connection) fieldList(db, table string) (*resultSet, error) {
 }
 
 func (c *connection) StartBinlogDump(position uint32, fileName string, serverId uint32) (el *eventLog, err error) {
+	ok, err := c.ChecksumCompatibility()
+	if err != nil {
+		return
+	}
+
 	register := &registerSlave{}
 	pack := register.writeServer(serverId)
 	err = c.packWriter.flush(pack)
@@ -175,6 +235,7 @@ func (c *connection) StartBinlogDump(position uint32, fileName string, serverId 
 	}
 
 	pack, err = c.packReader.readNextPack()
+
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +253,13 @@ func (c *connection) StartBinlogDump(position uint32, fileName string, serverId 
 		return nil, err
 	}
 
-	el = newEventLog(c)
+	var additionalLength int
+
+	if ok {
+		additionalLength = 4
+	}
+
+	el = newEventLog(c, additionalLength)
 
 	return el, nil
 }

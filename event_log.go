@@ -2,7 +2,6 @@ package mysql_replication_listener
 
 import (
 	"math"
-	"fmt"
 )
 
 type (
@@ -19,6 +18,8 @@ type (
 		headerWriteRowsEventV1Length  byte
 
 		lastTableMapEvent *TableMapEvent
+
+		additionalLength int
 
 		eventChan chan interface{}
 	}
@@ -99,7 +100,7 @@ type (
 		*eventLogHeader
 		name    string
 		isNil   bool
-		_type    byte
+		_type   byte
 		charset uint32
 		value   string
 		flags   byte
@@ -149,7 +150,7 @@ type (
 		columnId int
 		isNull   bool
 		value    interface{}
-		_type     byte
+		_type    byte
 	}
 
 	DeleteEvent struct {
@@ -197,7 +198,7 @@ func (event *RowsEventValue) GetType() byte {
 	return event._type
 }
 
-func (event *RowsEventValue) GetValue() interface {} {
+func (event *RowsEventValue) GetValue() interface{} {
 	return event.value
 }
 
@@ -288,7 +289,7 @@ func (event *rowsEvent) read(pack *pack) {
 
 			value := &RowsEventValue{
 				columnId: i,
-				_type:     column.Type,
+				_type:    column.Type,
 			}
 
 			if isTrue(i, nullBitmap) {
@@ -571,7 +572,6 @@ func (event *QueryEvent) read(pack *pack) {
 	}
 
 	event.schema = string(pack.Next(int(schemaLength)))
-
 	splitter, _ := pack.ReadByte()
 
 	if splitter != 0 {
@@ -583,7 +583,7 @@ func (event *QueryEvent) read(pack *pack) {
 
 func (event *logRotateEvent) read(pack *pack) {
 	pack.readUint64(&event.position)
-	event.binlogFileName = pack.Bytes()
+	event.binlogFileName = pack.Next(pack.Len())
 }
 
 func (event *formatDescriptionEvent) read(pack *pack) {
@@ -612,10 +612,11 @@ func (eh *eventLogHeader) readHead(pack *pack) {
 	pack.readUint16(&eh.Flags)
 }
 
-func newEventLog(mysqlConnection *connection) *eventLog {
+func newEventLog(mysqlConnection *connection, additionalLength int) *eventLog {
 	return &eventLog{
-		mysqlConnection: mysqlConnection,
-		eventChan:       make(chan interface{}),
+		mysqlConnection:  mysqlConnection,
+		eventChan:        make(chan interface{}),
+		additionalLength: additionalLength,
 	}
 }
 
@@ -717,7 +718,7 @@ func (ev *eventLog) Start() error {
 }
 
 func (ev *eventLog) readEvent() (interface{}, error) {
-	pack, err := ev.mysqlConnection.packReader.readNextPack()
+	pack, err := ev.mysqlConnection.packReader.readNextPackWithAdditionalLength(ev.additionalLength)
 
 	if err != nil {
 		return nil, err
@@ -842,8 +843,8 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 			tableMapEvent:    ev.lastTableMapEvent,
 		}
 	default:
-		println("Unknown event")
-		println(fmt.Sprintf("% x\n", pack.buff))
+		//		println("Unknown event")
+		//		println(fmt.Sprintf("% x\n", pack.buff))
 		return nil, nil
 	}
 

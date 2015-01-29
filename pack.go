@@ -59,6 +59,10 @@ func newPack() *pack {
 }
 
 func (r *packReader) readNextPack() (*pack, error) {
+	return r.readNextPackWithAdditionalLength(0)
+}
+
+func (r *packReader) readNextPackWithAdditionalLength(addLength int) (*pack, error) {
 	buff := make([]byte, 4)
 	_, err := r.conn.Read(buff)
 	if err != nil {
@@ -77,9 +81,11 @@ func (r *packReader) readNextPack() (*pack, error) {
 		buff:     make([]byte, length),
 	}
 
-	pack.Buffer = bytes.NewBuffer(pack.buff)
-
 	_, err = r.conn.Read(pack.buff)
+	if addLength > 0 {
+		pack.buff = pack.buff[0 : len(pack.buff)-addLength]
+	}
+	pack.Buffer = bytes.NewBuffer(pack.buff)
 	if err != nil {
 		return nil, err
 	}

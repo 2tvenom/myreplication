@@ -32,9 +32,9 @@ func main() {
 		panic("Cant start bin log: " + err.Error())
 	}
 	events := el.GetEventChan()
-	go func () {
+	go func() {
 		for {
-			event := <- events
+			event := <-events
 
 			switch e := event.(type) {
 			case *mysql_replication_listener.QueryEvent:

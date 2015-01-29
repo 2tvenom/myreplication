@@ -64,6 +64,11 @@ func (rs *resultSet) init() error {
 		panic("Column count got panic")
 	}
 
+	if columnCount == 0 {
+		rs.finish = true
+		return nil
+	}
+
 	rs.columns = make([]*columnSet, columnCount)
 
 	sequenceId := pack.getSequence() + 1
@@ -83,7 +88,6 @@ func (rs *resultSet) init() error {
 
 		rs.columns[i] = packToColumnPack(columnPack)
 	}
-
 	pack, err = rs.reader.readNextPack()
 
 	if err != nil {
