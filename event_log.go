@@ -137,7 +137,6 @@ type (
 		*eventLogHeader
 		tableMapEvent    *TableMapEvent
 		postHeaderLength byte
-		version          byte
 
 		tableId   uint64
 		flags     uint16
@@ -243,9 +242,11 @@ func (event *rowsEvent) read(pack *pack) {
 
 	pack.readUint16(&event.Flags)
 
-	if event.version == 2 {
+	//If row event == 2
+	if event.EventType >= _WRITE_ROWS_EVENTv2 && event.EventType <= _DELETE_ROWS_EVENTv2  {
 		var extraDataLength uint16
 		pack.readUint16(&extraDataLength)
+		extraDataLength -= 2
 		event.extraData = pack.Next(int(extraDataLength))
 	}
 
@@ -255,13 +256,11 @@ func (event *rowsEvent) read(pack *pack) {
 	)
 
 	pack.readIntLengthOrNil(&columnCount, &isNull)
-
 	bitMapLength := int((columnCount + 7) / 8)
 
 	var columnPreset, columnPresentBitmap1, columnPresentBitmap2, nullBitmap []byte
 
 	columnPresentBitmap1 = pack.Next(bitMapLength)
-
 	if isUpdateEvent {
 		columnPresentBitmap2 = pack.Next(bitMapLength)
 	}
@@ -838,7 +837,6 @@ func (ev *eventLog) readEvent() (interface{}, error) {
 	case _WRITE_ROWS_EVENTv2:
 		event = &rowsEvent{
 			eventLogHeader:   header,
-			version:          byte(ev.binlogVersion),
 			postHeaderLength: ev.headerWriteRowsEventV1Length,
 			tableMapEvent:    ev.lastTableMapEvent,
 		}

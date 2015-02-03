@@ -1055,7 +1055,6 @@ func TestWriteRowsEventV1(t *testing.T) {
 
 		write := &rowsEvent{}
 		write.eventLogHeader = header
-		write.version = byte(1)
 		write.postHeaderLength = byte(8)
 		write.tableMapEvent = getTableMapEvent(testCase.tableMapEventBuff)
 		write.read(pack)
@@ -1184,7 +1183,6 @@ func TestDeleteRowsEventV1(t *testing.T) {
 
 		delete := &rowsEvent{}
 		delete.eventLogHeader = header
-		delete.version = byte(1)
 		delete.postHeaderLength = byte(8)
 		delete.tableMapEvent = getTableMapEvent(testCase.tableMapEventBuff)
 		delete.read(pack)
@@ -1370,7 +1368,6 @@ func TestUpdateRowsEventV1(t *testing.T) {
 
 		update := &rowsEvent{}
 		update.eventLogHeader = header
-		update.version = byte(1)
 		update.postHeaderLength = byte(8)
 		update.tableMapEvent = getTableMapEvent(testCase.tableMapEventBuff)
 		update.read(pack)
