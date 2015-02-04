@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"mysql_replication_listener"
+	"myreplication"
 )
 
 var (
@@ -13,7 +13,7 @@ var (
 )
 
 func main() {
-	newConnection := mysql_replication_listener.NewConnection()
+	newConnection := myreplication.NewConnection()
 	serverId := uint32(2)
 	err := newConnection.ConnectAndAuth(host, port, username, password)
 
@@ -37,24 +37,41 @@ func main() {
 			event := <-events
 
 			switch e := event.(type) {
-			case *mysql_replication_listener.QueryEvent:
+			case *myreplication.QueryEvent:
+				//Output query event
 				println(e.GetQuery())
-			case *mysql_replication_listener.WriteEvent:
+			case *myreplication.IntVarEvent:
+				//Output last insert_id  if statement based replication
+				println(e.GetValue())
+			case *myreplication.WriteEvent:
+				//Output Write (insert) event
 				println("Write", e.GetTable())
+				//Rows loop
 				for i, row := range e.GetRows() {
+					//Columns loop
 					for j, col := range row {
+						//Output row number, column number, column type and column value
 						println(fmt.Sprintf("%d %d %d %v", i, j, col.GetType(), col.GetValue()))
 					}
 				}
-			case *mysql_replication_listener.DeleteEvent:
+			case *myreplication.DeleteEvent:
+				//Output delete event
 				println("Delete", e.GetTable())
 				for i, row := range e.GetRows() {
 					for j, col := range row {
 						println(fmt.Sprintf("%d %d %d %v", i, j, col.GetType(), col.GetValue()))
 					}
 				}
-			case *mysql_replication_listener.UpdateEvent:
+			case *myreplication.UpdateEvent:
+				//Output update event
 				println("Update", e.GetTable())
+				//Output old data before update
+				for i, row := range e.GetRows() {
+					for j, col := range row {
+						println(fmt.Sprintf("%d %d %d %v", i, j, col.GetType(), col.GetValue()))
+					}
+				}
+				//Output new
 				for i, row := range e.GetNewRows() {
 					for j, col := range row {
 						println(fmt.Sprintf("%d %d %d %v", i, j, col.GetType(), col.GetValue()))

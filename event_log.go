@@ -1,4 +1,4 @@
-package mysql_replication_listener
+package myreplication
 
 import (
 	"math"
@@ -243,7 +243,7 @@ func (event *rowsEvent) read(pack *pack) {
 	pack.readUint16(&event.Flags)
 
 	//If row event == 2
-	if event.EventType >= _WRITE_ROWS_EVENTv2 && event.EventType <= _DELETE_ROWS_EVENTv2  {
+	if event.EventType >= _WRITE_ROWS_EVENTv2 && event.EventType <= _DELETE_ROWS_EVENTv2 {
 		var extraDataLength uint16
 		pack.readUint16(&extraDataLength)
 		extraDataLength -= 2

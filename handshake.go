@@ -1,4 +1,4 @@
-package mysql_replication_listener
+package myreplication
 
 /*
 	http://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::HandshakeV10

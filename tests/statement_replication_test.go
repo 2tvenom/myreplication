@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
-	"mysql_replication_listener"
+	"myreplication"
 	"os"
 	"testing"
 )
@@ -20,7 +20,7 @@ const (
 )
 
 func TestStatementReplication(t *testing.T) {
-	newConnection := mysql_replication_listener.NewConnection()
+	newConnection := myreplication.NewConnection()
 	serverId := uint32(2)
 	err := newConnection.ConnectAndAuth(HOST, PORT, REPLICATION_USERNAME, REPLICATION_PASSWORD)
 
@@ -65,19 +65,19 @@ func TestStatementReplication(t *testing.T) {
 
 		expectedQuery := "BEGIN"
 
-		if expectedQuery != (<-events).(*mysql_replication_listener.QueryEvent).GetQuery() {
+		if expectedQuery != (<-events).(*myreplication.QueryEvent).GetQuery() {
 			newConnection.Connection().Close()
 			t.Fatal("Got incorrect query")
 		}
 
-		if (<-events).(*mysql_replication_listener.IntVarEvent).GetValue() != (maxId + 1) {
+		if (<-events).(*myreplication.IntVarEvent).GetValue() != (maxId + 1) {
 			newConnection.Connection().Close()
 			t.Fatal("Got incorrect IntEvent")
 		}
 
 		expectedQuery = "INSERT INTO new_table(text_field, num_field) values('Hello!',10)"
 
-		if expectedQuery != (<-events).(*mysql_replication_listener.QueryEvent).GetQuery() {
+		if expectedQuery != (<-events).(*myreplication.QueryEvent).GetQuery() {
 			newConnection.Connection().Close()
 			t.Fatal("Got incorrect query")
 		}

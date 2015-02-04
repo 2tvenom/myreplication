@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
-	"mysql_replication_listener"
+	"myreplication"
 	"os"
 	"reflect"
 	"testing"
@@ -30,7 +30,7 @@ type (
 )
 
 func TestRowReplication(t *testing.T) {
-	newConnection := mysql_replication_listener.NewConnection()
+	newConnection := myreplication.NewConnection()
 	serverId := uint32(2)
 	err := newConnection.ConnectAndAuth(HOST, PORT, REPLICATION_USERNAME, REPLICATION_PASSWORD)
 
@@ -68,7 +68,7 @@ func TestRowReplication(t *testing.T) {
 		if err != nil {
 			t.Fatal(err.Error())
 		}
-		query := (<-events).(*mysql_replication_listener.QueryEvent).GetQuery()
+		query := (<-events).(*myreplication.QueryEvent).GetQuery()
 		expectedQuery := "TRUNCATE new_table"
 
 		if expectedQuery != query {
@@ -86,14 +86,14 @@ func TestRowReplication(t *testing.T) {
 
 		expectedQuery = "BEGIN"
 
-		query = (<-events).(*mysql_replication_listener.QueryEvent).GetQuery()
+		query = (<-events).(*myreplication.QueryEvent).GetQuery()
 
 		if expectedQuery != query {
 			newConnection.Connection().Close()
 			t.Fatal("Got incorrect query", "expected", expectedQuery, "got", query)
 		}
 
-		writeQuery := (<-events).(*mysql_replication_listener.WriteEvent)
+		writeQuery := (<-events).(*myreplication.WriteEvent)
 
 		if expectedTable != writeQuery.GetTable() {
 			newConnection.Connection().Close()
@@ -122,9 +122,9 @@ func TestRowReplication(t *testing.T) {
 		}
 
 		tests := []*columnTest{
-			&columnTest{0, mysql_replication_listener.MYSQL_TYPE_LONG, uint32(maxId), false},
-			&columnTest{1, mysql_replication_listener.MYSQL_TYPE_VARCHAR, "Hello!", false},
-			&columnTest{2, mysql_replication_listener.MYSQL_TYPE_LONG, uint32(10), false},
+			&columnTest{0, myreplication.MYSQL_TYPE_LONG, uint32(maxId), false},
+			&columnTest{1, myreplication.MYSQL_TYPE_VARCHAR, "Hello!", false},
+			&columnTest{2, myreplication.MYSQL_TYPE_LONG, uint32(10), false},
 		}
 
 		for i, column := range columns {
@@ -175,14 +175,14 @@ func TestRowReplication(t *testing.T) {
 
 		expectedQuery = "BEGIN"
 
-		query = (<-events).(*mysql_replication_listener.QueryEvent).GetQuery()
+		query = (<-events).(*myreplication.QueryEvent).GetQuery()
 
 		if expectedQuery != query {
 			newConnection.Connection().Close()
 			t.Fatal("Got incorrect query", "expected", expectedQuery, "got", query)
 		}
 
-		updateEvent := (<-events).(*mysql_replication_listener.UpdateEvent)
+		updateEvent := (<-events).(*myreplication.UpdateEvent)
 
 		if expectedTable != updateEvent.GetTable() {
 			newConnection.Connection().Close()
@@ -267,9 +267,9 @@ func TestRowReplication(t *testing.T) {
 		}
 
 		tests = []*columnTest{
-			&columnTest{0, mysql_replication_listener.MYSQL_TYPE_LONG, uint32(maxId), false},
-			&columnTest{1, mysql_replication_listener.MYSQL_TYPE_VARCHAR, "World!", false},
-			&columnTest{2, mysql_replication_listener.MYSQL_TYPE_LONG, uint32(10), false},
+			&columnTest{0, myreplication.MYSQL_TYPE_LONG, uint32(maxId), false},
+			&columnTest{1, myreplication.MYSQL_TYPE_VARCHAR, "World!", false},
+			&columnTest{2, myreplication.MYSQL_TYPE_LONG, uint32(10), false},
 		}
 
 		for i, column := range columns {
@@ -320,13 +320,13 @@ func TestRowReplication(t *testing.T) {
 
 		expectedQuery = "BEGIN"
 
-		query = (<-events).(*mysql_replication_listener.QueryEvent).GetQuery()
+		query = (<-events).(*myreplication.QueryEvent).GetQuery()
 		if expectedQuery != query {
 			newConnection.Connection().Close()
 			t.Fatal("Got incorrect query", "expected", expectedQuery, "got", query)
 		}
 
-		deleteEvent := (<-events).(*mysql_replication_listener.DeleteEvent)
+		deleteEvent := (<-events).(*myreplication.DeleteEvent)
 
 		if expectedTable != deleteEvent.GetTable() {
 			newConnection.Connection().Close()

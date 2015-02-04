@@ -1,4 +1,4 @@
-package mysql_replication_listener
+package myreplication
 
 import (
 	//	"reflect"
