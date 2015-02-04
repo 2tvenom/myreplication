@@ -140,6 +140,7 @@ func main() {
  - Go MySql client. Password encryption method https://github.com/ziutek/mymysql
  - Java implementation. Decimal type parsing https://github.com/whitesock/open-replicator 
  - Ruby implementation. Decimal type parsing https://github.com/jeremycole/mysql_binlog
+ - Docker files https://github.com/docker-library/mysql
  
 
 ## Licence
