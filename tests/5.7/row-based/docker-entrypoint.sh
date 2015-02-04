@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+# TODO read this from the MySQL config?
 DATADIR='/var/lib/mysql'
 
 if [ "${1:0:1}" = '-' ]; then
@@ -15,12 +16,13 @@ if [ ! -d "$DATADIR/mysql" -a "${1%_safe}" = 'mysqld' ]; then
 	fi
 	
 	echo 'Running mysql_install_db ...'
-	mysql_install_db
+	mysql_install_db --datadir="$DATADIR" --mysqld-file="$(which mysqld)"
 	echo 'Finished mysql_install_db'
 	
 	# These statements _must_ be on individual lines, and _must_ end with
 	# semicolons (no line breaks or comments are permitted).
-
+	# TODO proper SQL escaping on ALL the things D:
+	
 	tempSqlFile='/tmp/mysql-first-time.sql'
 	cat > "$tempSqlFile" <<-EOSQL
 		DELETE FROM mysql.user ;
@@ -40,10 +42,12 @@ if [ ! -d "$DATADIR/mysql" -a "${1%_safe}" = 'mysqld' ]; then
 			echo "GRANT ALL ON \`$MYSQL_DATABASE\`.* TO '$MYSQL_USER'@'%' ;" >> "$tempSqlFile"
 		fi
 	fi
-
 	echo "GRANT REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO '$MYSQL_USER'@'%' ;" >> "$tempSqlFile"
 	echo 'FLUSH PRIVILEGES ;' >> "$tempSqlFile"
 	echo 'CREATE TABLE `test`.`new_table`(`id` int(11) NOT NULL AUTO_INCREMENT, `text_field` varchar(45) DEFAULT NULL, `num_field` int(11) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB DEFAULT CHARSET=latin1;' >> "$tempSqlFile"
+
+	echo 'FLUSH PRIVILEGES ;' >> "$tempSqlFile"
+	
 	set -- "$@" --init-file="$tempSqlFile"
 fi
 

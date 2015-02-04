@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 
 /usr/bin/env docker --version >/dev/null 2>&1 || { echo >&2 "Docker not found"; exit 1; }
+/usr/bin/env go version >/dev/null 2>&1 || { echo >&2 "Go not found"; exit 1; }
 
 versions="5.5 5.6 5.7"
 repication="row statement"
-versions="5.5"
-repication="row"
 testimagename="gobinlogreplicationtest"
 
 dockerclear() {
@@ -35,16 +34,31 @@ do
             -e MYSQL_USER=admin \
             -e MYSQL_PASSWORD=admin \
             -e MYSQL_DATABASE=test \
-            --name $testimagename $testimagename
+            --name $testimagename $testimagename > /dev/null
 
         RETVAL=$?
         [ $RETVAL -ne 0 ] && echo "Can't run docker container" && dockerclear && exit 1
 
-        echo "Test ${rep} replication with MySql version ${version}"
-        /usr/bin/env go test "${rep}_replication_test.go"
+        trial=0
+        for ((;;))
+        do
+            /usr/bin/env mysql --protocol=tcp --port=3307 --user=admin --password=admin test \
+            -e "SELECT version()" > /dev/null 2>&1
+            RETVAL=$?
+            [ $RETVAL -eq 0 ] && break
+
+            trial=$((trial+1))
+            [ $trial -eq 20 ] && echo "Can't connect to docker mysql container" && dockerclear && exit 1
+            sleep 1
+        done
+
+        echo "Test ${rep} replication MySql version ${version}"
+        /usr/bin/env go test "${rep}_replication_test.go" > /dev/null
 
         RETVAL=$?
         [ $RETVAL -ne 0 ] && dockerclear && exit 1
+        [ $RETVAL -eq 0 ] && echo -e "[ \033[0;32mOK\033[0m ]"
+
     done
 done
 
