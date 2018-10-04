@@ -217,7 +217,7 @@ func (event *rowsEvent) GetTable() string {
 	return event.tableMapEvent.TableName
 }
 
-func (event *rowsEvent) GetNewId() uint64 {
+func (event *rowsEvent) GetTableId() uint64 {
 	return event.tableId
 }
 
