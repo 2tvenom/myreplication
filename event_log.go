@@ -217,6 +217,10 @@ func (event *rowsEvent) GetTable() string {
 	return event.tableMapEvent.TableName
 }
 
+func (event *rowsEvent) GetTableId() uint64 {
+	return event.tableId
+}
+
 func (event *rowsEvent) GetRows() [][]*RowsEventValue {
 	return event.values
 }
